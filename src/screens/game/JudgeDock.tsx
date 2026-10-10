@@ -29,6 +29,11 @@ function StepButton({ s, children, disabled, variant = 'gold', onStep }: StepBut
   )
 }
 
+/** 神职已出局时的空过提示 */
+function DeadHint({ role }: { role: string }) {
+  return <Info tone="bad">{role}已出局 · 空过流程，请照常念台词并稍作停顿</Info>
+}
+
 /** 法官控制台：根据阶段显示下一步按钮与进度 */
 export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
   const [choosingTie, setChoosingTie] = useState(false)
@@ -111,18 +116,12 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
         )
       break
     }
+    // 预言家 / 女巫已出局：按钮与顺序和存活时完全一致，只是不需要等待玩家，法官照常念台词即可
     case 'seer_wake':
-      body = !seer!.alive ? (
+      body = (
         <>
-          <Info>预言家已出局（仍需走流程，避免泄露信息）</Info>
-          <StepButton onStep={step} s="seerClose" variant="stone">
-            预言家请闭眼
-          </StepButton>
-        </>
-      ) : (
-        <>
-          <Info tone={seer!.opened ? 'ok' : 'wait'}>{seer!.opened ? '预言家已睁眼' : '等待预言家睁眼… 0/1'}</Info>
-          <StepButton onStep={step} s="seerPick" variant="mystic" disabled={!seer!.opened}>
+          {!seer!.alive ? <DeadHint role="预言家" /> : <Info tone={seer!.opened ? 'ok' : 'wait'}>{seer!.opened ? '预言家已睁眼' : '等待预言家睁眼… 0/1'}</Info>}
+          <StepButton onStep={step} s="seerPick" variant="mystic" disabled={seer!.alive && !seer!.opened}>
             请预言家选择要查验的玩家
           </StepButton>
         </>
@@ -131,10 +130,14 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
     case 'seer_pick':
       body = (
         <>
-          <Info tone={seer!.confirmed ? 'ok' : 'wait'}>
-            {seer!.selection === null ? '预言家正在选择…' : `预言家${seer!.confirmed ? '确认' : '正在看'} ${seatName(g, seer!.selection)}`}
-          </Info>
-          <StepButton onStep={step} s="seerReveal" variant="mystic" disabled={!seer!.confirmed}>
+          {!seer!.alive ? (
+            <DeadHint role="预言家" />
+          ) : (
+            <Info tone={seer!.confirmed ? 'ok' : 'wait'}>
+              {seer!.selection === null ? '预言家正在选择…' : `预言家${seer!.confirmed ? '确认' : '正在看'} ${seatName(g, seer!.selection)}`}
+            </Info>
+          )}
+          <StepButton onStep={step} s="seerReveal" variant="mystic" disabled={seer!.alive && !seer!.confirmed}>
             验明身份
           </StepButton>
         </>
@@ -143,9 +146,13 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
     case 'seer_result':
       body = (
         <>
-          <Info tone={seer!.result === 'good' ? 'ok' : 'bad'}>
-            {seatName(g, seer!.selection!)} 是 {seer!.result === 'good' ? '好人 👍' : '坏人 👎'}
-          </Info>
+          {!seer!.alive ? (
+            <DeadHint role="预言家" />
+          ) : (
+            <Info tone={seer!.result === 'good' ? 'ok' : 'bad'}>
+              {seatName(g, seer!.selection!)} 是 {seer!.result === 'good' ? '好人 👍' : '坏人 👎'}
+            </Info>
+          )}
           <StepButton onStep={step} s="seerClose" variant="stone">
             预言家请闭眼
           </StepButton>
@@ -153,17 +160,10 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
       )
       break
     case 'witch_wake':
-      body = !witch!.alive ? (
+      body = (
         <>
-          <Info>女巫已出局（仍需走流程，避免泄露信息）</Info>
-          <StepButton onStep={step} s="witchClose" variant="stone">
-            女巫请闭眼
-          </StepButton>
-        </>
-      ) : (
-        <>
-          <Info tone={witch!.opened ? 'ok' : 'wait'}>{witch!.opened ? '女巫已睁眼' : '等待女巫睁眼… 0/1'}</Info>
-          <StepButton onStep={step} s="witchInform" variant="moss" disabled={!witch!.opened}>
+          {!witch!.alive ? <DeadHint role="女巫" /> : <Info tone={witch!.opened ? 'ok' : 'wait'}>{witch!.opened ? '女巫已睁眼' : '等待女巫睁眼… 0/1'}</Info>}
+          <StepButton onStep={step} s="witchInform" variant="moss" disabled={witch!.alive && !witch!.opened}>
             告知死亡信息
           </StepButton>
         </>
@@ -172,12 +172,16 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
     case 'witch_act':
       body = (
         <>
-          <Info tone={witch!.acted ? 'ok' : 'wait'}>
-            {!witch!.acted
-              ? `女巫正在决定… ${witch!.canSeeVictim ? '' : '(解药已用完，不告知死讯)'}`
-              : [witch!.saved && '使用了解药', witch!.poisoned !== null && `毒杀了 ${seatName(g, witch!.poisoned)}`].filter(Boolean).join('，') || '女巫没有用药'}
-          </Info>
-          <StepButton onStep={step} s="witchClose" variant="stone" disabled={!witch!.acted}>
+          {!witch!.alive ? (
+            <DeadHint role="女巫" />
+          ) : (
+            <Info tone={witch!.acted ? 'ok' : 'wait'}>
+              {!witch!.acted
+                ? `女巫正在决定… ${witch!.canSeeVictim ? '' : '(解药已用完，不告知死讯)'}`
+                : [witch!.saved && '使用了解药', witch!.poisoned !== null && `毒杀了 ${seatName(g, witch!.poisoned)}`].filter(Boolean).join('，') || '女巫没有用药'}
+            </Info>
+          )}
+          <StepButton onStep={step} s="witchClose" variant="stone" disabled={witch!.alive && !witch!.acted}>
             女巫请闭眼
           </StepButton>
         </>

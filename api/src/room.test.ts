@@ -37,23 +37,22 @@ function night(s: ReturnType<typeof setup>, kill: number | 'none', opts: { save?
   as(wolves[0]!, { type: 'wolfChat', text: '刀他' })
   as(wolves[0]!, { type: 'wolfConfirm' })
   J('wolfClose')
+  // 神职出局后法官仍完整走流程，只是不需要玩家操作
   const seer = g().roles.indexOf('seer')
   J('seerWake')
+  if (g().alive[seer]) as(seer, { type: 'openEyes' })
+  J('seerPick')
   if (g().alive[seer]) {
-    as(seer, { type: 'openEyes' })
-    J('seerPick')
     as(seer, { type: 'seerSelect', seat: opts.check ?? 0 })
     as(seer, { type: 'seerConfirm' })
-    J('seerReveal')
   }
+  J('seerReveal')
   J('seerClose')
   const witch = g().roles.indexOf('witch')
   J('witchWake')
-  if (g().alive[witch]) {
-    as(witch, { type: 'openEyes' })
-    J('witchInform')
-    as(witch, { type: 'witchAct', save: !!opts.save, poison: opts.poison ?? null })
-  }
+  if (g().alive[witch]) as(witch, { type: 'openEyes' })
+  J('witchInform')
+  if (g().alive[witch]) as(witch, { type: 'witchAct', save: !!opts.save, poison: opts.poison ?? null })
   J('witchClose')
   J('dawn')
 }
@@ -368,4 +367,27 @@ test('after reveal, everyone can read all channels', () => {
   expect(alive().ghostChat!.map((m) => m.text)).toEqual(['我死得冤'])
   // 结束后不能再发言
   expect(() => as(5, { type: 'ghostChat', text: 'x' })).toThrow('游戏未开始')
+})
+
+test('dead seer / witch: judge walks the full flow as if they were alive', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  const { J, room } = s
+  const g = room.d.game!
+  g.alive[2] = false // 预言家
+  g.alive[3] = false // 女巫
+  J('nightStart'); J('wolfWake'); s.as(0, { type: 'openEyes' }); s.as(1, { type: 'openEyes' }); J('wolfPick')
+  s.as(0, { type: 'wolfSelect', choice: 5 }); s.as(1, { type: 'wolfSelect', choice: 5 }); s.as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  const phases: string[] = []
+  for (const step of ['seerWake', 'seerPick', 'seerReveal', 'seerClose', 'witchWake', 'witchInform', 'witchClose'] as const) {
+    // 不能跳步
+    if (step === 'seerPick') expect(() => J('seerClose')).toThrow()
+    if (step === 'witchInform') expect(() => J('witchClose')).toThrow()
+    J(step)
+    phases.push(g.phase)
+  }
+  expect(phases).toEqual(['seer_wake', 'seer_pick', 'seer_result', 'night_menu', 'witch_wake', 'witch_act', 'night_menu'])
+  expect(g.seerHistory).toEqual([])
+  J('dawn')
+  expect(g.lastNightDeaths).toEqual([5])
 })

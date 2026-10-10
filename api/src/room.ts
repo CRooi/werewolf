@@ -683,27 +683,27 @@ export class Room {
         if (!this.d.config.seer || n.seerDone) fail('预言家环节已结束')
         g.phase = 'seer_wake'
         return
+      // 预言家 / 女巫已出局时，法官仍完整走一遍流程（不等待玩家操作），让场上玩家无法从节奏上察觉
       case 'seerPick': {
         this.expect('seer_wake')
-        const s = this.roleSeat('seer')
-        if (!g.alive[s]) fail('预言家已出局，请直接让预言家闭眼')
-        if (!n.seerOpened) fail('预言家还没有睁眼')
+        const alive = g.alive[this.roleSeat('seer')]
+        if (alive && !n.seerOpened) fail('预言家还没有睁眼')
         g.phase = 'seer_pick'
         return
       }
       case 'seerReveal': {
         this.expect('seer_pick')
-        const target = n.seerSel
-        if (!n.seerConfirmed || target === null) return fail('预言家还没有确认')
-        n.seerResult = g.roles[target] === 'werewolf' ? 'bad' : 'good'
-        g.seerHistory.push({ day: g.day, seat: target, result: n.seerResult })
+        if (g.alive[this.roleSeat('seer')]) {
+          const target = n.seerSel
+          if (!n.seerConfirmed || target === null) return fail('预言家还没有确认')
+          n.seerResult = g.roles[target] === 'werewolf' ? 'bad' : 'good'
+          g.seerHistory.push({ day: g.day, seat: target, result: n.seerResult })
+        }
         g.phase = 'seer_result'
         return
       }
       case 'seerClose': {
-        const seerDead = !g.alive[this.roleSeat('seer')]
-        if (g.phase === 'seer_wake' && !seerDead) fail('预言家还没有完成查验')
-        this.expect('seer_wake', 'seer_result')
+        this.expect('seer_result')
         n.seerDone = true
         g.phase = 'night_menu'
         return
@@ -715,18 +715,15 @@ export class Room {
         return
       case 'witchInform': {
         this.expect('witch_wake')
-        const s = this.roleSeat('witch')
-        if (!g.alive[s]) fail('女巫已出局，请直接让女巫闭眼')
-        if (!n.witchOpened) fail('女巫还没有睁眼')
+        const alive = g.alive[this.roleSeat('witch')]
+        if (alive && !n.witchOpened) fail('女巫还没有睁眼')
         n.witchInformed = true
         g.phase = 'witch_act'
         return
       }
       case 'witchClose': {
-        const witchDead = !g.alive[this.roleSeat('witch')]
-        if (g.phase === 'witch_wake' && !witchDead) fail('女巫还没有行动')
-        if (g.phase === 'witch_act' && !n.witchActed) fail('女巫还没有行动')
-        this.expect('witch_wake', 'witch_act')
+        this.expect('witch_act')
+        if (g.alive[this.roleSeat('witch')] && !n.witchActed) fail('女巫还没有行动')
         n.witchDone = true
         g.phase = 'night_menu'
         return
