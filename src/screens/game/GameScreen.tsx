@@ -314,8 +314,8 @@ function Seat({ g, seat, side, peek, isJudge }: { g: GameView; seat: number; sid
     selected = true
     tone = 'mystic'
   }
-  // 预言家自己的查验记录
-  if (g.seer && g.myRole === 'seer') {
+  // 预言家的查验记录：预言家本人、法官、出局观战者可见
+  if (g.seer && (g.myRole === 'seer' || g.watching || isJudge)) {
     const h = [...g.seer.history].reverse().find((x) => x.seat === seat)
     if (h) marks.push(<span key="seer">{h.result === 'good' ? '👍' : '👎'}</span>)
   }
@@ -330,8 +330,8 @@ function Seat({ g, seat, side, peek, isJudge }: { g: GameView; seat: number; sid
       tone = 'blood'
     }
   }
-  // 法官：今晚将死亡
-  if (isJudge && p.pendingDeath) {
+  // 法官与观战者：今晚将死亡
+  if ((isJudge || g.watching) && p.pendingDeath) {
     overlay = <div className="absolute inset-0 flex items-center justify-center bg-red-900/60 font-display text-sm text-white">将死</div>
   }
 
@@ -432,7 +432,7 @@ function PlayerDock({
 }
 
 function statusText(g: GameView) {
-  if (!g.meAlive && g.phase !== 'game_over') return '你已出局，请保持安静'
+  if (!g.meAlive && g.phase !== 'game_over') return isNight(g.phase) ? '你已出局，正在观战，请勿透露信息' : '你已出局，请保持安静'
   switch (g.phase) {
     case 'dealt':
       return '等待法官宣布天黑'

@@ -1,6 +1,7 @@
 import type { Announcement, GameView, StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { EyeClosed, EyeOpen } from '@/components/art/icons'
+import { WolfChat } from './ActionPanels'
 import { PHASE_TITLE, isNight } from './helpers'
 
 function Moon() {
@@ -68,7 +69,7 @@ export function Stage({ state }: { state: StateView }) {
         {night && !isJudge && (
           <div className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground">
             {eyesOpenForMe ? <EyeOpen className="h-6 w-10" color={eyeColor} /> : <EyeClosed className="h-6 w-10 text-gold-soft/70" />}
-            {eyesOpenForMe ? '已睁眼' : myTurn ? '轮到你' : g.meAlive ? '闭眼中' : '已出局'}
+            {eyesOpenForMe ? '已睁眼' : myTurn ? '轮到你' : g.meAlive ? '闭眼中' : '观战中'}
           </div>
         )}
       </div>
@@ -77,8 +78,9 @@ export function Stage({ state }: { state: StateView }) {
 
       {/* 内容区 */}
       <div className="flex flex-1 flex-col gap-2">
-        {night && isJudge && <NightSummary g={g} />}
-        {dark && !isJudge && (
+        {night && (isJudge || g.watching) && <NightSummary g={g} />}
+        {night && g.watching && g.wolf && ['wolf_wake', 'wolf_pick'].includes(g.phase) && <WolfChat g={g} readOnly />}
+        {dark && !isJudge && !(night && g.watching) && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-sm text-gold-soft/70">
             {g.phase === 'dealt' ? '身份已发放，记住你的身份，等待法官宣布天黑' : !g.meAlive ? '你已出局，请保持安静' : myTurn ? '轮到你了，请点击下方「睁眼」' : eyesOpenForMe ? '请按提示完成操作' : '夜幕笼罩村庄，请安静等待…'}
           </div>
@@ -121,40 +123,66 @@ export function Stage({ state }: { state: StateView }) {
   )
 }
 
-/** 法官夜间速览：今晚各角色的行动 */
+/** 夜间速览（法官与出局观战者可见）：今晚各角色的行动 */
 function NightSummary({ g }: { g: GameView }) {
   const name = (s: number) => `${s + 1}号 ${g.players[s]?.user.name ?? ''}`
+  const short = (c: number | 'none' | null | undefined) => (c === 'none' ? '不杀' : typeof c === 'number' ? `${c + 1}号` : '未选')
+  const phase = g.phase
+  const rows: { icon: string; role: string; text: string; active: boolean }[] = []
+
   const w = g.wolf
-  const rows: [string, string, string][] = []
-  rows.push([
-    '🐺',
-    '狼人',
-    !w?.confirmed ? (g.phase === 'night_start' ? '尚未行动' : '行动中…') : w.target === 'none' ? '今晚不猎杀' : `猎杀 ${name(w.target as number)}`,
-  ])
+  if (w) {
+    let text: string
+    if (w.confirmed) text = w.target === 'none' ? '今晚不猎杀' : `猎杀 ${name(w.target as number)}`
+    else if (phase === 'wolf_pick') text = '选择中：' + w.aliveSeats.map((s) => `${s + 1}号→${short(w.selections[s])}`).join('，')
+    else if (phase === 'wolf_wake') text = `睁眼 ${w.aliveSeats.filter((s) => w.opened.includes(s)).length}/${w.aliveSeats.length}`
+    else text = '尚未行动'
+    rows.push({ icon: '🐺', role: '狼人', text, active: ['wolf_wake', 'wolf_pick'].includes(phase) })
+  }
+
   if (g.hasSeer && g.seer) {
     const s = g.seer
-    rows.push([
-      '🔮',
-      '预言家',
-      !s.alive ? '已出局' : g.seerDone || s.result ? (s.selection !== null ? `查验 ${name(s.selection)}：${s.result === 'bad' ? '坏人 👎' : '好人 👍'}` : '已结束') : s.confirmed ? `查验 ${name(s.selection!)}` : '尚未行动',
-    ])
+    const active = ['seer_wake', 'seer_pick', 'seer_result'].includes(phase)
+    let text: string
+    // 预言家已出局时法官仍会照常叫，避免活人从节奏里推断死讯
+    if (!s.alive) text = active ? '已出局 · 法官空过流程' : '已出局'
+    else if (s.result && s.selection !== null) text = `查验 ${name(s.selection)}：${s.result === 'bad' ? '坏人 👎' : '好人 👍'}`
+    else if (g.seerDone) text = '已结束'
+    else if (s.selection !== null) text = `${s.confirmed ? '确认查验' : '正在看'} ${name(s.selection)}`
+    else text = phase === 'seer_wake' ? (s.opened ? '已睁眼' : '等待睁眼') : '尚未行动'
+    rows.push({ icon: '🔮', role: '预言家', text, active })
   }
+
   if (g.hasWitch && g.witch) {
     const wi = g.witch
+    const active = ['witch_wake', 'witch_act'].includes(phase)
     const acts = [wi.saved && '使用解药', wi.poisoned !== null && `毒杀 ${name(wi.poisoned)}`].filter(Boolean).join('，')
-    rows.push(['🧪', '女巫', !wi.alive ? '已出局' : wi.acted ? acts || '未用药' : '尚未行动'])
+    let text: string
+    if (!wi.alive) text = active ? '已出局 · 法官空过流程' : '已出局'
+    else if (wi.acted) text = acts || '未用药'
+    else if (phase === 'witch_act') text = wi.canSeeVictim ? '正在决定是否用药' : '正在决定（解药已用完，不知刀口）'
+    else text = phase === 'witch_wake' ? (wi.opened ? '已睁眼' : '等待睁眼') : '尚未行动'
+    const potions = `解药${wi.antidote ? '✓' : '✗'} 毒药${wi.poison ? '✓' : '✗'}`
+    rows.push({ icon: '🧪', role: '女巫', text: `${text}（${potions}）`, active })
   }
+
   const deaths = g.players.filter((p) => p.pendingDeath).map((p) => name(p.seat))
+  const history = g.seer?.history ?? []
   return (
     <div className="space-y-1.5 text-sm">
-      {rows.map(([icon, role, text]) => (
-        <div key={role} className="flex items-center gap-2 rounded-lg bg-black/25 px-3 py-1.5">
-          <span>{icon}</span>
-          <span className="w-12 text-gold-soft/80">{role}</span>
-          <span className="flex-1 text-[#f3ead6]">{text}</span>
+      {rows.map((r) => (
+        <div key={r.role} className={cn('flex items-start gap-2 rounded-lg px-3 py-1.5', r.active ? 'bg-gold/15 ring-1 ring-gold/40' : 'bg-black/25')}>
+          <span>{r.icon}</span>
+          <span className="w-12 shrink-0 text-gold-soft/80">{r.role}</span>
+          <span className="flex-1 text-[#f3ead6]">{r.text}</span>
         </div>
       ))}
       <div className="px-1 pt-1 text-xs text-red-300">{deaths.length ? `目前将死亡：${deaths.join('、')}` : '目前无人死亡'}</div>
+      {history.length > 0 && (
+        <div className="px-1 text-xs text-purple-200/80">
+          查验记录：{history.map((h) => `第${h.day}夜 ${h.seat + 1}号${h.result === 'good' ? '👍' : '👎'}`).join('　')}
+        </div>
+      )}
     </div>
   )
 }

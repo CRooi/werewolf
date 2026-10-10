@@ -185,6 +185,8 @@ export interface GameView {
   mySeat: number | null
   myRole: Role | null
   meAlive: boolean
+  /** 已出局的玩家：可观看狼人、预言家、女巫的操作 */
+  watching: boolean
   /** 死亡玩家长按可查看的所有身份 */
   peekRoles: Role[] | null
   wolf: WolfView | null

@@ -215,3 +215,33 @@ test('judge can speak in wolf channel, other players cannot', () => {
   const chat = room.view(room.d.game!.seats[1]!, () => true).game!.wolf!.chat
   expect(chat.map((m) => [m.seat, m.text])).toEqual([[-1, '请尽快统一意见'], [0, '收到']])
 })
+
+test('dead players can watch wolf / seer / witch actions; alive players cannot', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  // 第一夜刀 5号（平民），天亮后 5号出局
+  night(s, 5, { check: 0 })
+  const { J, as, room } = s
+  const g = room.d.game!
+  expect(g.alive[5]).toBe(false)
+  J('voteStart')
+  vote(s, { 0: 'abstain', 1: 'abstain', 2: 'abstain', 3: 'abstain', 4: 'abstain', 6: 'abstain' })
+  J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
+  as(0, { type: 'wolfSelect', choice: 6 }); as(0, { type: 'wolfChat', text: '刀6' })
+  const dead = room.view(g.seats[5]!, () => true).game!
+  expect(dead.watching).toBe(true)
+  expect(dead.wolf!.selections[0]).toBe(6)
+  expect(dead.wolf!.chat[0]!.text).toBe('刀6')
+  expect(dead.seer!.history).toEqual([{ day: 1, seat: 0, result: 'bad' }])
+  expect(dead.witch).not.toBeNull()
+  const alive = room.view(g.seats[6]!, () => true).game!
+  expect(alive.watching).toBe(false)
+  expect(alive.wolf).toBeNull()
+  expect(alive.seer).toBeNull()
+  expect(alive.witch).toBeNull()
+  // 观战者能看到女巫当晚的刀口
+  as(1, { type: 'wolfSelect', choice: 6 }); as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  J('witchWake'); as(3, { type: 'openEyes' }); J('witchInform')
+  expect(room.view(g.seats[5]!, () => true).game!.witch!.victim).toBe(6)
+  expect(room.view(g.seats[5]!, () => true).game!.players[6]!.pendingDeath).toBe(true)
+})

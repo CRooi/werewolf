@@ -831,7 +831,10 @@ export class Room {
     const revealed = g.phase === 'revealed'
     const isWolf = myRole === 'werewolf'
     const night = this.isNightPhaseOf(g.phase)
-    const pending = isJudge && night ? this.pendingDeathsFor(g) : []
+    // 已公布出局的玩家进入观战：可以看到狼人、预言家、女巫的操作（当晚刚被刀、尚未天亮的不算）
+    const watching = mySeat !== null && !meAlive
+    const godView = isJudge || watching
+    const pending = godView && night ? this.pendingDeathsFor(g) : []
 
     const players: PlayerView[] = g.seats.map((uid, i) => {
       let role: Role | undefined
@@ -843,7 +846,7 @@ export class Room {
     })
 
     const wolfSeats = g.roles.map((r, i) => (r === 'werewolf' ? i : -1)).filter((i) => i >= 0)
-    const showWolf = isJudge || isWolf
+    const showWolf = godView || isWolf
     const seerSeat = g.roles.indexOf('seer')
     const witchSeat = g.roles.indexOf('witch')
     const victim = typeof n.wolfTarget === 'number' ? n.wolfTarget : null
@@ -857,6 +860,7 @@ export class Room {
       mySeat,
       myRole,
       meAlive,
+      watching,
       peekRoles: mySeat !== null && !meAlive ? g.roles.slice() : null,
       wolf: showWolf
         ? {
@@ -870,7 +874,7 @@ export class Room {
           }
         : null,
       seer:
-        seerSeat >= 0 && (isJudge || myRole === 'seer')
+        seerSeat >= 0 && (godView || myRole === 'seer')
           ? {
               seat: seerSeat,
               alive: g.alive[seerSeat]!,
@@ -882,7 +886,7 @@ export class Room {
             }
           : null,
       witch:
-        witchSeat >= 0 && (isJudge || myRole === 'witch')
+        witchSeat >= 0 && (godView || myRole === 'witch')
           ? {
               seat: witchSeat,
               alive: g.alive[witchSeat]!,
@@ -890,7 +894,7 @@ export class Room {
               informed: n.witchInformed,
               antidote: g.antidote,
               poison: g.poison,
-              victim: isJudge || witchCanSee ? victim : null,
+              victim: godView || witchCanSee ? victim : null,
               canSeeVictim: witchCanSee,
               acted: n.witchActed,
               saved: n.saved,
