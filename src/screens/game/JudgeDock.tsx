@@ -274,15 +274,15 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
       {body}
       {showChat && (
         <button className="mx-auto flex items-center gap-1 text-xs text-red-300" onClick={() => setChatOpen(true)}>
-          <MessageSquare className="size-3.5" /> 查看狼人频道（{w!.chat.length}）
+          <MessageSquare className="size-3.5" /> 狼人频道（{w!.chat.length}）
         </button>
       )}
       <Dialog open={chatOpen && showChat} onOpenChange={setChatOpen}>
         <DialogContent className="panel max-w-sm">
           <DialogHeader>
-            <DialogTitle className="font-display">狼人频道（只读）</DialogTitle>
+            <DialogTitle className="font-display">狼人频道</DialogTitle>
           </DialogHeader>
-          <WolfChat g={g} readOnly />
+          <WolfChat g={g} send={send} />
         </DialogContent>
       </Dialog>
     </div>

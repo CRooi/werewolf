@@ -203,3 +203,15 @@ test('spectator view only exposes public info', () => {
   expect(v.game!.players.every((p) => p.role)).toBe(true)
   expect(v.game!.winner).toBe('good')
 })
+
+test('judge can speak in wolf channel, other players cannot', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  const { J, as, room, judge } = s
+  J('nightStart'); J('wolfWake')
+  room.handle(judge.id, { type: 'wolfChat', text: '请尽快统一意见' })
+  expect(() => as(2, { type: 'wolfChat', text: 'hi' })).toThrow('你不能发言')
+  as(0, { type: 'wolfChat', text: '收到' })
+  const chat = room.view(room.d.game!.seats[1]!, () => true).game!.wolf!.chat
+  expect(chat.map((m) => [m.seat, m.text])).toEqual([[-1, '请尽快统一意见'], [0, '收到']])
+})

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Ban, Check, Send } from 'lucide-react'
-import type { ClientMessage, GameView } from '@shared/types'
+import { JUDGE_CHAT_SEAT, type ClientMessage, type GameView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -157,11 +157,18 @@ export function WolfChat({ g, send, readOnly }: { g: GameView; send?: Send; read
       <div ref={listRef} className="max-h-36 min-h-16 space-y-1.5 overflow-y-auto p-2">
         {chat.length === 0 && <div className="py-3 text-center text-xs text-muted-foreground">悄悄商量一下吧…</div>}
         {chat.map((m, i) => {
-          const mine = m.seat === g.mySeat
+          const fromJudge = m.seat === JUDGE_CHAT_SEAT
+          // 法官视角 mySeat 为 null，自己的发言即法官发言
+          const mine = m.seat === (g.mySeat ?? JUDGE_CHAT_SEAT)
           return (
             <div key={i} className={cn('flex', mine && 'justify-end')}>
-              <div className={cn('max-w-[85%] rounded-xl px-2.5 py-1 text-sm', mine ? 'bg-blood/70 text-white' : 'bg-white/10')}>
-                {!mine && <span className="mr-1 text-[10px] text-red-300">{m.seat + 1}号 {m.name}</span>}
+              <div
+                className={cn(
+                  'max-w-[85%] rounded-xl px-2.5 py-1 text-sm',
+                  mine ? (fromJudge ? 'bg-gold/80 text-[#2a1a05]' : 'bg-blood/70 text-white') : fromJudge ? 'border border-gold/40 bg-gold/15' : 'bg-white/10',
+                )}
+              >
+                {!mine && <span className={cn('mr-1 text-[10px]', fromJudge ? 'text-gold' : 'text-red-300')}>{fromJudge ? '⚖️ 法官' : `${m.seat + 1}号 ${m.name}`}</span>}
                 {m.text}
               </div>
             </div>
@@ -175,7 +182,7 @@ export function WolfChat({ g, send, readOnly }: { g: GameView; send?: Send; read
             maxLength={200}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && submit()}
-            placeholder="和同伴说点什么"
+            placeholder={g.mySeat === null ? '以法官身份发言' : '和同伴说点什么'}
             className="h-9 bg-black/30"
           />
           <Button size="icon-lg" variant="blood" onClick={submit} aria-label="发送">

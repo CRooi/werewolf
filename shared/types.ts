@@ -90,7 +90,11 @@ export interface PlayerView {
   pendingDeath?: boolean
 }
 
+/** 狼人频道里法官发言使用的座位号 */
+export const JUDGE_CHAT_SEAT = -1
+
 export interface ChatMessage {
+  /** 发言者座位号；法官为 JUDGE_CHAT_SEAT */
   seat: number
   name: string
   text: string

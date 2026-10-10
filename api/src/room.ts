@@ -1,5 +1,6 @@
 import {
   GOD_ROLES,
+  JUDGE_CHAT_SEAT,
   MAX_SEATS,
   ROLE_NAME,
   ROLE_ORDER,
@@ -440,11 +441,12 @@ export class Room {
         return
       }
       case 'wolfChat': {
-        if (myRole !== 'werewolf' || !meAlive) fail('你不能发言')
+        // 存活的狼人和法官可以在狼人频道发言
+        if (!isJudge && (myRole !== 'werewolf' || !meAlive)) fail('你不能发言')
         if (!['wolf_wake', 'wolf_pick'].includes(g.phase)) fail('现在不能交流')
         const text = String(msg.text ?? '').trim().slice(0, 200)
         if (!text) return
-        g.night.chat.push({ seat: mySeat, name: this.d.users[userId]!.name, text, ts: Date.now() })
+        g.night.chat.push({ seat: isJudge ? JUDGE_CHAT_SEAT : mySeat, name: this.d.users[userId]!.name, text, ts: Date.now() })
         return
       }
       case 'wolfConfirm': {
