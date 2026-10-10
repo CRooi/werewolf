@@ -21,6 +21,7 @@ import { PlayerToken, SeatChip } from '@/components/game/PlayerToken'
 import { RoleCard } from '@/components/game/RoleCard'
 import { SeatTable } from '@/components/game/SeatTable'
 import type { ConnStatus } from '@/hooks/useRoomSocket'
+import { tabKey } from '@/lib/session'
 import { HunterPanel, SeerPanel, VoteBoard, WitchPanel, WolfPanel } from './ActionPanels'
 import { isNight, pendingAction, vibrate, type ActionKind } from './helpers'
 import { JudgeDock } from './JudgeDock'
@@ -36,14 +37,14 @@ interface Props {
 
 const sget = (k: string) => {
   try {
-    return sessionStorage.getItem(k)
+    return sessionStorage.getItem(tabKey(k))
   } catch {
     return null
   }
 }
 const sset = (k: string, v: string) => {
   try {
-    sessionStorage.setItem(k, v)
+    sessionStorage.setItem(tabKey(k), v)
   } catch {
     /* ignore */
   }
@@ -73,12 +74,12 @@ export function GameScreen({ state, status, send, onDone }: Props) {
   useWakeLock()
 
   // 身份牌展示（每局一次）
-  const [revealSeen, setRevealSeen] = useState(() => sget('ww.reveal') === g.id)
+  const [revealSeen, setRevealSeen] = useState(() => sget('reveal') === g.id)
   // 公告：只弹出进入页面之后的新公告
   const seenAnn = useRef<number | null>(null)
   const [annQueue, setAnnQueue] = useState<Announcement[]>([])
   useEffect(() => {
-    const key = `ww.ann.${g.id}`
+    const key = `ann.${g.id}`
     if (seenAnn.current === null) seenAnn.current = Number(sget(key) ?? g.announcements.length)
     if (g.announcements.length > seenAnn.current) {
       const fresh = g.announcements.slice(seenAnn.current)
@@ -196,7 +197,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
           g={g}
           isJudge={isJudge}
           onClose={() => {
-            sset('ww.reveal', g.id)
+            sset('reveal', g.id)
             setRevealSeen(true)
           }}
         />

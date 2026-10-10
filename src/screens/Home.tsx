@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, DoorOpen, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bug, DoorOpen, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { DEFAULT_CONFIG, type RoomConfig } from '@shared/types'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,9 @@ import { ConfigForm } from '@/components/game/ConfigForm'
 import { api, loadName, saveName, type Session } from '@/lib/session'
 
 type Mode = 'menu' | 'create' | 'join'
+
+/** 开发环境或构建时设置 VITE_DEBUG=1 时在首页显示调试台入口（调试台本身始终可通过 ?debug 访问） */
+const SHOW_DEBUG_LINK = import.meta.env.DEV || import.meta.env.VITE_DEBUG === '1'
 
 export function Home({ onEnter }: { onEnter: (s: Session) => void }) {
   const initialCode = new URLSearchParams(location.search).get('room') ?? ''
@@ -84,7 +87,13 @@ export function Home({ onEnter }: { onEnter: (s: Session) => void }) {
               <DoorOpen /> 加入房间
             </Button>
           </div>
-          <div className="h-8" />
+          <div className="flex h-10 items-center justify-center">
+            {SHOW_DEBUG_LINK && (
+              <a href="?debug" className="flex items-center gap-1 text-xs text-fuchsia-300/80 underline">
+                <Bug className="size-3.5" /> 调试台
+              </a>
+            )}
+          </div>
         </>
       ) : (
         <div className="flex flex-1 flex-col pt-2">

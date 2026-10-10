@@ -3,11 +3,11 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Scenery } from '@/components/art/Scenery'
 import { useRoomSocket } from '@/hooks/useRoomSocket'
-import type { Session } from '@/lib/session'
+import { tabKey, type Session } from '@/lib/session'
 import { Lobby } from './Lobby'
 import { GameScreen } from './game/GameScreen'
 
-const DISMISS_KEY = 'ww.dismissed'
+const DISMISS_KEY = tabKey('dismissed')
 
 export function RoomScreen({ session, onExit }: { session: Session; onExit: () => void }) {
   const { state, status, send } = useRoomSocket(session, (reason) => {
