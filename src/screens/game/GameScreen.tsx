@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Eye, LogOut, ScrollText, Square } from 'lucide-react'
+import { Eye, EyeOff, LogOut, ScrollText, Square } from 'lucide-react'
 import type { Announcement, ClientMessage, GameView, StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -139,7 +139,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
 
       <SeatTable
         count={g.players.length}
-        renderSeat={(seat, side) => <Seat g={g} seat={seat} side={side} peek={peek} isJudge={isJudge} />}
+        renderSeat={(seat, side) => <Seat g={g} seat={seat} side={side} peek={peek} isJudge={isJudge} isSpectator={isSpectator} />}
       />
 
       <div className="mt-3 flex flex-1 flex-col">
@@ -152,7 +152,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
           {isJudge ? (
             <JudgeDock g={g} send={send} />
           ) : isSpectator ? (
-            <SpectatorDock g={g} onOpenVote={() => setVoteView(true)} onExit={() => send({ type: 'leave' })} />
+            <SpectatorDock g={g} onOpenVote={() => setVoteView(true)} onExit={() => send({ type: 'leave' })} peek={peek} setPeek={setPeek} />
           ) : (
             <PlayerDock
               g={g}
@@ -161,6 +161,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
               onOpenAction={() => setClosedKey(null)}
               onOpenRole={() => setRoleOpen(true)}
               onOpenVote={() => setVoteView(true)}
+              peek={peek}
               setPeek={setPeek}
             />
           )}
@@ -279,10 +280,12 @@ function ActionDialogBody({ g, kind, send }: { g: GameView; kind: ActionKind | n
 }
 
 /** 一个座位：根据观察者身份显示不同标记 */
-function Seat({ g, seat, side, peek, isJudge }: { g: GameView; seat: number; side: 'left' | 'right'; peek: boolean; isJudge: boolean }) {
+function Seat({ g, seat, side, peek, isJudge, isSpectator }: { g: GameView; seat: number; side: 'left' | 'right'; peek: boolean; isJudge: boolean; isSpectator: boolean }) {
   const p = g.players[seat]!
   const night = isNight(g.phase)
-  const role = p.role ?? (peek && g.peekRoles ? g.peekRoles[seat] : undefined)
+  // 观战席默认隐藏身份（公开的身份除外），与出局玩家一样点击「查看身份」切换
+  const hideForSpectator = isSpectator && !peek && g.phase !== 'revealed' && seat !== g.idiotRevealed
+  const role = hideForSpectator ? undefined : (p.role ?? (peek && g.peekRoles ? g.peekRoles[seat] : undefined))
   const marks: ReactNode[] = []
   let status: ReactNode = null
   let selected = false
@@ -378,6 +381,7 @@ function PlayerDock({
   onOpenAction,
   onOpenRole,
   onOpenVote,
+  peek,
   setPeek,
 }: {
   g: GameView
@@ -386,6 +390,7 @@ function PlayerDock({
   onOpenAction: () => void
   onOpenRole: () => void
   onOpenVote: () => void
+  peek: boolean
   setPeek: (v: boolean) => void
 }) {
   const night = isNight(g.phase)
@@ -446,7 +451,7 @@ function PlayerDock({
             查看投票情况
           </Button>
         )}
-        {!g.meAlive && g.peekRoles && <PeekButton setPeek={setPeek} />}
+        {!g.meAlive && g.peekRoles && <PeekToggle peek={peek} setPeek={setPeek} />}
       </div>
     </div>
   )
@@ -573,7 +578,19 @@ function ChannelBar({
 }
 
 /** 观战席底栏：只能看，不能操作 */
-function SpectatorDock({ g, onOpenVote, onExit }: { g: GameView; onOpenVote: () => void; onExit: () => void }) {
+function SpectatorDock({
+  g,
+  onOpenVote,
+  onExit,
+  peek,
+  setPeek,
+}: {
+  g: GameView
+  onOpenVote: () => void
+  onExit: () => void
+  peek: boolean
+  setPeek: (v: boolean) => void
+}) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex size-14 shrink-0 items-center justify-center rounded-xl border border-gold/30 bg-black/40">
@@ -581,6 +598,7 @@ function SpectatorDock({ g, onOpenVote, onExit }: { g: GameView; onOpenVote: () 
       </div>
       <div className="min-w-0 flex-1 space-y-2">
         <div className="text-sm text-gold-soft/85">观战席 · 上帝视角，只能观看</div>
+        {g.phase !== 'revealed' && <PeekToggle peek={peek} setPeek={setPeek} />}
         <div className="flex gap-2">
           {g.phase === 'voting' && g.vote && (
             <Button variant="stone" size="lg2" className="flex-1" onClick={onOpenVote}>
@@ -596,32 +614,21 @@ function SpectatorDock({ g, onOpenVote, onExit }: { g: GameView; onOpenVote: () 
   )
 }
 
-/** 出局玩家长按查看所有身份，松手隐藏 */
-function PeekButton({ setPeek }: { setPeek: (v: boolean) => void }) {
-  const [down, setDown] = useState(false)
-  const on = () => {
-    setDown(true)
-    setPeek(true)
-    vibrate(30)
-  }
-  const off = () => {
-    setDown(false)
-    setPeek(false)
-  }
+/** 出局玩家与观战者查看身份：点击切换显示 / 隐藏 */
+function PeekToggle({ peek, setPeek }: { peek: boolean; setPeek: (v: boolean) => void }) {
   return (
     <button
       type="button"
       className={cn(
-        'no-select flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold/40 font-display text-gold-soft transition',
-        down ? 'scale-95 bg-gold/25' : 'bg-black/30',
+        'flex h-11 w-full items-center justify-center gap-2 rounded-xl border font-display transition active:scale-95',
+        peek ? 'border-gold bg-gold/25 text-gold-soft' : 'border-gold/40 bg-black/30 text-gold-soft',
       )}
-      onPointerDown={on}
-      onPointerUp={off}
-      onPointerLeave={off}
-      onPointerCancel={off}
-      onContextMenu={(e) => e.preventDefault()}
+      onClick={() => {
+        setPeek(!peek)
+        vibrate(20)
+      }}
     >
-      <Eye className="size-4" /> {down ? '松手隐藏' : '长按 查看身份'}
+      {peek ? <EyeOff className="size-4" /> : <Eye className="size-4" />} {peek ? '隐藏身份' : '查看身份'}
     </button>
   )
 }
