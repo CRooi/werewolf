@@ -1,0 +1,180 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-display);
+  --font-sans: 'Geist Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-display: 'ZCOOL XiaoWei', 'Songti SC', 'STSong', serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-blood: var(--blood);
+  --color-mystic: var(--mystic);
+  --color-moss: var(--moss);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* 游戏只有一种主题：月夜 */
+:root {
+  --background: #0a0e24;
+  --foreground: #f3ead6;
+  --card: #141a3a;
+  --card-foreground: #f3ead6;
+  --popover: #121733;
+  --popover-foreground: #f3ead6;
+  --primary: #e8b45a;
+  --primary-foreground: #2a1a05;
+  --secondary: #222a52;
+  --secondary-foreground: #f3ead6;
+  --muted: #1b2247;
+  --muted-foreground: #a9a6c4;
+  --accent: #2a3263;
+  --accent-foreground: #f3ead6;
+  --destructive: #e5484d;
+  --border: rgb(232 180 90 / 0.22);
+  --input: rgb(232 180 90 / 0.28);
+  --ring: #e8b45a;
+  --radius: 0.75rem;
+  --gold: #e8b45a;
+  --gold-soft: #f6dca0;
+  --blood: #d23c3c;
+  --mystic: #8b5cf6;
+  --moss: #3fae7a;
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body {
+    @apply bg-background text-foreground font-sans;
+    overscroll-behavior: none;
+  }
+  body {
+    min-height: 100dvh;
+    /* 让 fixed -z-10 的场景背景透出来 */
+    background: transparent;
+  }
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.04em;
+  }
+  /* 羊皮纸金边面板 */
+  .panel {
+    position: relative;
+    background:
+      linear-gradient(180deg, rgb(30 37 80 / 0.92), rgb(15 19 45 / 0.94));
+    border: 1px solid rgb(232 180 90 / 0.35);
+    border-radius: var(--radius-xl);
+    box-shadow:
+      inset 0 1px 0 rgb(255 240 200 / 0.08),
+      inset 0 0 0 3px rgb(10 14 36 / 0.6),
+      inset 0 0 0 4px rgb(232 180 90 / 0.12),
+      0 10px 30px -10px rgb(0 0 0 / 0.7);
+    backdrop-filter: blur(6px);
+  }
+  .panel-day {
+    background: linear-gradient(180deg, rgb(255 248 230 / 0.92), rgb(250 232 196 / 0.94));
+    color: #3b2a12;
+    border-color: rgb(180 120 40 / 0.45);
+  }
+  .text-gold-grad {
+    background: linear-gradient(180deg, #fff3c8 0%, #f0c46c 50%, #b9822f 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .divider-ornament {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--gold);
+    opacity: 0.7;
+  }
+  .divider-ornament::before,
+  .divider-ornament::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(232 180 90 / 0.55), 0 0 24px 2px rgb(232 180 90 / 0.35); }
+  50% { box-shadow: 0 0 0 10px rgb(232 180 90 / 0), 0 0 36px 6px rgb(232 180 90 / 0.55); }
+}
+@keyframes red-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(210 60 60 / 0.6); }
+  50% { box-shadow: 0 0 0 8px rgb(210 60 60 / 0); }
+}
+@keyframes drift {
+  from { transform: translateX(-10%); }
+  to { transform: translateX(10%); }
+}
+@keyframes flip-in {
+  from { transform: perspective(800px) rotateY(90deg) scale(0.9); opacity: 0; }
+  to { transform: perspective(800px) rotateY(0) scale(1); opacity: 1; }
+}
+@keyframes rise {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes eye-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px #ff3b30); }
+  50% { filter: drop-shadow(0 0 6px #ff3b30); }
+}
+.animate-twinkle { animation: twinkle 3s ease-in-out infinite; }
+.animate-float { animation: float-y 4s ease-in-out infinite; }
+.animate-glow { animation: glow-pulse 1.8s ease-in-out infinite; }
+.animate-red-pulse { animation: red-pulse 1.6s ease-in-out infinite; }
+.animate-flip-in { animation: flip-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.animate-rise { animation: rise 0.45s ease-out both; }
+.animate-eye-glow { animation: eye-glow 1.5s ease-in-out infinite; }
+.no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.safe-bottom { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+.safe-top { padding-top: max(0.5rem, env(safe-area-inset-top)); }
