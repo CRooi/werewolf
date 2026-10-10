@@ -115,7 +115,7 @@ export function Stage({ state, send }: { state: StateView; send: (m: ClientMessa
             </div>
           </div>
         )}
-        {g.phase === 'vote_result' && v?.result && (
+        {['vote_result', 'idiot'].includes(g.phase) && v?.result && (
           <div className="mt-auto rounded-xl bg-amber-900/10 px-3 py-2 text-center text-sm font-bold text-amber-950">{v.result.note}</div>
         )}
       </div>

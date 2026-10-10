@@ -88,6 +88,9 @@ export interface GameState {
   seerHistory: { day: number; seat: number; result: 'good' | 'bad' }[]
   vote: VoteState | null
   hunter: HunterState | null
+  /** 白痴被投出，等待决定是否亮明身份 */
+  idiot: { seat: number } | null
+  idiotRevealed: number | null
   /** 猎人是否已经开过枪（只能开一次） */
   hunterUsed: boolean
   announcements: Announcement[]
@@ -143,13 +146,14 @@ export function validateConfig(c: RoomConfig): RoomConfig {
     seer: Math.floor(Number(c.seer) || 0),
     witch: Math.floor(Number(c.witch) || 0),
     hunter: Math.floor(Number(c.hunter) || 0),
+    idiot: Math.floor(Number(c.idiot) || 0),
     villager: Math.floor(Number(c.villager) || 0),
     witchBothSameNight: !!c.witchBothSameNight,
     witchSelfSave: !!c.witchSelfSave,
     allowSpectators: !!c.allowSpectators,
   }
   for (const r of ROLE_ORDER) if (clean[r] < 0) fail('角色数量不能为负数')
-  if (clean.seer > 1 || clean.witch > 1 || clean.hunter > 1) fail('预言家、女巫、猎人最多各 1 名')
+  if (clean.seer > 1 || clean.witch > 1 || clean.hunter > 1 || clean.idiot > 1) fail('预言家、女巫、猎人、白痴最多各 1 名')
   if (clean.werewolf < 1) fail('至少需要 1 名狼人')
   const n = seatCount(clean)
   if (n - clean.werewolf < 1) fail('至少需要 1 名好人')
@@ -176,9 +180,12 @@ export class Room {
     // 兼容旧数据
     d.spectators ??= []
     d.config.allowSpectators ??= false
+    d.config.idiot ??= 0
     if (d.game) {
       d.game.ghostChat ??= []
       d.game.wolfChat ??= []
+      d.game.idiot ??= null
+      d.game.idiotRevealed ??= null
     }
   }
 
@@ -414,6 +421,8 @@ export class Room {
       seerHistory: [],
       vote: null,
       hunter: null,
+      idiot: null,
+      idiotRevealed: null,
       hunterUsed: false,
       announcements: [],
       judgeLog: ['发牌完成'],
@@ -584,6 +593,7 @@ export class Room {
         if (c !== null && c !== 'abstain') {
           if (!(typeof c === 'number' && g.alive[c])) fail('只能投给存活玩家')
           if (v.candidates && !v.candidates.includes(c)) fail('只能投给 PK 玩家')
+          if (c === g.idiotRevealed) fail('已亮明身份的白痴不能被投票')
         }
         v.ballots[mySeat] = { choice: c, confirmed: false }
         return
@@ -596,6 +606,12 @@ export class Room {
         if (!b || b.choice === null) fail('请先选择')
         b!.confirmed = true
         if (v.voters.every((s) => v.ballots[s]?.confirmed)) this.tallyVote()
+        return
+      }
+      case 'idiotDecide': {
+        this.expect('idiot')
+        if (!g.idiot || g.idiot.seat !== mySeat) fail('你不是待决定的白痴')
+        this.idiotDecide(!!msg.reveal)
         return
       }
       case 'hunterShoot': {
@@ -789,7 +805,8 @@ export class Room {
 
   private openVote(round: number, candidates: number[] | null) {
     const g = this.g()
-    const voters = g.alive.map((a, i) => (a ? i : -1)).filter((i) => i >= 0 && !(candidates ?? []).includes(i))
+    // 已翻牌的白痴不能投票
+    const voters = g.alive.map((a, i) => (a ? i : -1)).filter((i) => i >= 0 && !(candidates ?? []).includes(i) && i !== g.idiotRevealed)
     if (!voters.length) fail('没有可以投票的玩家')
     g.vote = { round, candidates, voters, ballots: {}, result: null }
     g.phase = 'voting'
@@ -830,6 +847,35 @@ export class Room {
   }
 
   private eliminateByVote(seat: number) {
+    const g = this.g()
+    // 未翻牌的白痴被投出：先由白痴决定是否亮明身份（对外不透露原因）
+    if (g.roles[seat] === 'idiot' && g.idiotRevealed === null) {
+      g.idiot = { seat }
+      g.vote!.result!.note = `${seat + 1}号 得票最多，等待法官处理`
+      g.phase = 'idiot'
+      this.log(`${this.label(seat)}（白痴）被投出，等待决定是否亮明身份`)
+      return
+    }
+    this.exileByVote(seat)
+  }
+
+  /** 白痴决定：亮明身份免于出局（此后不能投票也不能被投票），否则照常出局 */
+  private idiotDecide(reveal: boolean) {
+    const g = this.g()
+    const seat = g.idiot!.seat
+    g.idiot = null
+    g.phase = 'vote_result'
+    if (!reveal) return this.exileByVote(seat)
+    const r = g.vote!.result!
+    g.idiotRevealed = seat
+    r.resolved = true
+    r.eliminated = null
+    r.note = `${seat + 1}号 亮明白痴身份，免于出局`
+    this.announce('vote', `投票结果：${this.label(seat)} 亮明身份是白痴，免于放逐，此后不能投票也不能被投票`, [])
+    this.log(`${this.label(seat)} 亮明白痴身份，免于出局`)
+  }
+
+  private exileByVote(seat: number) {
     const g = this.g()
     const r = g.vote!.result!
     r.eliminated = seat
@@ -908,7 +954,7 @@ export class Room {
 
     const players: PlayerView[] = g.seats.map((uid, i) => {
       let role: Role | undefined
-      if (isJudge || isSpectator || revealed || i === mySeat || (isWolf && g.roles[i] === 'werewolf')) role = g.roles[i]
+      if (isJudge || isSpectator || revealed || i === mySeat || i === g.idiotRevealed || (isWolf && g.roles[i] === 'werewolf')) role = g.roles[i]
       const p: PlayerView = { seat: i, user: brief(uid), alive: g.alive[i]! }
       if (role) p.role = role
       if (pending.includes(i)) p.pendingDeath = true
@@ -976,6 +1022,8 @@ export class Room {
           : null,
       vote: g.vote,
       hunter: g.hunter && (isJudge || isSpectator || g.hunter.seat === mySeat) ? g.hunter : null,
+      idiot: g.idiot && (godView || g.idiot.seat === mySeat) ? g.idiot : null,
+      idiotRevealed: g.idiotRevealed,
       hasSeer: c.seer > 0,
       hasWitch: c.witch > 0,
       seerDone: n.seerDone,

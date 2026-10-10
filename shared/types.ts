@@ -1,25 +1,27 @@
 // Shared between the web client (src) and the API server (api).
 // Only types and pure constants live here.
 
-export type Role = 'werewolf' | 'seer' | 'witch' | 'hunter' | 'villager'
+export type Role = 'werewolf' | 'seer' | 'witch' | 'hunter' | 'idiot' | 'villager'
 
-export const ROLE_ORDER: Role[] = ['werewolf', 'seer', 'witch', 'hunter', 'villager']
+export const ROLE_ORDER: Role[] = ['werewolf', 'seer', 'witch', 'hunter', 'idiot', 'villager']
 
 export const ROLE_NAME: Record<Role, string> = {
   werewolf: '狼人',
   seer: '预言家',
   witch: '女巫',
   hunter: '猎人',
+  idiot: '白痴',
   villager: '平民',
 }
 
-export const GOD_ROLES: Role[] = ['seer', 'witch', 'hunter']
+export const GOD_ROLES: Role[] = ['seer', 'witch', 'hunter', 'idiot']
 
 export interface RoomConfig {
   werewolf: number
   seer: number
   witch: number
   hunter: number
+  idiot: number
   villager: number
   /** 女巫是否可以同一晚同时使用解药和毒药 */
   witchBothSameNight: boolean
@@ -34,6 +36,7 @@ export const DEFAULT_CONFIG: RoomConfig = {
   seer: 1,
   witch: 1,
   hunter: 1,
+  idiot: 0,
   villager: 2,
   witchBothSameNight: false,
   witchSelfSave: true,
@@ -46,7 +49,7 @@ export const MAX_SPECTATORS = 5
 export const MAX_SEATS = 18
 
 export function seatCount(c: RoomConfig) {
-  return c.werewolf + c.seer + c.witch + c.hunter + c.villager
+  return c.werewolf + c.seer + c.witch + c.hunter + (c.idiot ?? 0) + c.villager
 }
 
 export type Phase =
@@ -64,6 +67,7 @@ export type Phase =
   | 'hunter' // 猎人带人
   | 'voting'
   | 'vote_result'
+  | 'idiot' // 白痴被投出，等待决定是否亮明身份
   | 'game_over' // 法官可见胜负，等待公布
   | 'revealed' // 已公布结果
 
@@ -208,6 +212,10 @@ export interface GameView {
   witch: WitchView | null
   vote: VoteView | null
   hunter: HunterView | null
+  /** 白痴被投出、等待决定（法官、观战者与白痴本人可见） */
+  idiot: { seat: number } | null
+  /** 已亮明身份的白痴：免于出局一次，此后不能投票也不能被投票 */
+  idiotRevealed: number | null
   /** 是否已配置该角色 */
   hasSeer: boolean
   hasWitch: boolean
@@ -283,6 +291,7 @@ export type ClientMessage =
   | { type: 'voteSelect'; choice: VoteChoice }
   | { type: 'voteConfirm' }
   | { type: 'hunterShoot'; target: number | null }
+  | { type: 'idiotDecide'; reveal: boolean }
   | { type: 'ping' }
 
 export type ServerMessage =

@@ -7,6 +7,7 @@ export const ROLE_TAGLINE: Record<ArtRole, string> = {
   seer: '每晚查验一人的真身',
   witch: '一瓶解药，一瓶毒药',
   hunter: '倒下之时，带走一人',
+  idiot: '被放逐时亮牌，免死一次',
   villager: '用推理守护村庄',
   judge: '主持公道，推动长夜',
   unknown: '身份未知',

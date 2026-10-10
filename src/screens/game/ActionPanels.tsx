@@ -382,7 +382,8 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
   const me = g.mySeat
   const my = me !== null ? v.ballots[me] : undefined
   const locked = !canVote || !!my?.confirmed
-  const candidates = v.candidates ?? aliveSeats(g)
+  // 已亮明身份的白痴不能被投票
+  const candidates = (v.candidates ?? aliveSeats(g)).filter((s) => s !== g.idiotRevealed)
   const votersFor = (c: number | 'abstain') => v.voters.filter((s) => v.ballots[s]?.choice === c)
   const chips = (c: number | 'abstain') => votersFor(c).map((s) => <SeatChip key={s} seat={s} variant={v.ballots[s]!.confirmed ? 'solid' : 'dashed'} />)
   const pick = (c: number | 'abstain') => !locked && send?.({ type: 'voteSelect', choice: my?.choice === c ? null : c })
@@ -439,6 +440,22 @@ export function HunterPanel({ g, send }: { g: GameView; send: Send }) {
           <Crosshair className="size-4" /> 开枪带走
         </Button>
       </div>
+    </div>
+  )
+}
+
+// ---------------- 白痴 ----------------
+
+export function IdiotPanel({ send }: { send: Send }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-center text-sm text-pink-200">你被投票放逐了。作为白痴，你可以亮明身份免于出局，但此后不能投票，也不能被投票。</p>
+      <Button variant="gold" size="xl" className="w-full" onClick={() => send({ type: 'idiotDecide', reveal: true })}>
+        亮明身份，免于出局
+      </Button>
+      <Button variant="stone" size="lg2" className="w-full" onClick={() => send({ type: 'idiotDecide', reveal: false })}>
+        不亮身份，直接出局
+      </Button>
     </div>
   )
 }

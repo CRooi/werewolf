@@ -131,7 +131,7 @@ function SeatBadge({ seat, name, online, g }: { seat: number; name: string | nul
   const dead = p ? !p.alive : false
   const role = p?.role
   const night = g ? isNight(g.phase) : false
-  const vote = g?.vote && ['voting', 'vote_result'].includes(g.phase) ? g.vote : null
+  const vote = g?.vote && ['voting', 'vote_result', 'idiot'].includes(g.phase) ? g.vote : null
   const voters = vote ? vote.voters.filter((s) => vote.ballots[s]?.choice === seat) : []
   const eliminated = vote?.result?.eliminated === seat
   const isCandidate = vote?.candidates?.includes(seat)
@@ -252,7 +252,7 @@ function Center({ state, g }: { state: StateView; g: GameView | null }) {
             />
           </div>
         </div>
-      ) : g.phase === 'vote_result' && v?.result ? (
+      ) : ['vote_result', 'idiot'].includes(g.phase) && v?.result ? (
         <div className="mt-[1vh] text-[2.6vh] text-gold-soft">{v.result.note}</div>
       ) : (
         <div className="mt-[1vh] text-[2.2vh] text-muted-foreground">

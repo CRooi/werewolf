@@ -3,7 +3,7 @@ import { Switch } from '@/components/ui/switch'
 import { RoleCard, roleLabel, ROLE_TAGLINE } from './RoleCard'
 import { Stepper } from './Stepper'
 
-const MAX: Record<string, number> = { werewolf: 6, seer: 1, witch: 1, hunter: 1, villager: 8 }
+const MAX: Record<string, number> = { werewolf: 6, seer: 1, witch: 1, hunter: 1, idiot: 1, villager: 8 }
 
 /** 板子配置：各角色数量 + 女巫规则 */
 export function ConfigForm({ value, onChange }: { value: RoomConfig; onChange: (c: RoomConfig) => void }) {

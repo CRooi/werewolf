@@ -23,7 +23,7 @@ import { SeatTable } from '@/components/game/SeatTable'
 import { WatchBanner } from '@/components/game/WatchBanner'
 import type { ConnStatus } from '@/hooks/useRoomSocket'
 import { tabKey } from '@/lib/session'
-import { ChatBox, HunterPanel, SeerPanel, VoteBoard, WitchPanel, WolfPanel } from './ActionPanels'
+import { ChatBox, HunterPanel, IdiotPanel, SeerPanel, VoteBoard, WitchPanel, WolfPanel } from './ActionPanels'
 import { isNight, pendingAction, vibrate, type ActionKind } from './helpers'
 import { JudgeDock } from './JudgeDock'
 import { AnnouncementOverlay, IdentityReveal, LogDialog, MyRoleDialog, ResultOverlay } from './Overlays'
@@ -99,7 +99,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
     if (action && action.key !== lastKey.current) vibrate(250)
     lastKey.current = action?.key ?? null
   }, [action?.key, action])
-  const dialogKinds: ActionKind[] = ['wolf', 'seer', 'witch', 'vote', 'hunter']
+  const dialogKinds: ActionKind[] = ['wolf', 'seer', 'witch', 'vote', 'hunter', 'idiot']
   // 先看完全屏公告（如天亮死讯），再弹出操作面板
   const dialogOpen = !!action && dialogKinds.includes(action.kind) && closedKey !== action.key && annQueue.length === 0
 
@@ -265,6 +265,14 @@ function ActionDialogBody({ g, kind, send }: { g: GameView; kind: ActionKind | n
         </>
       )
       break
+    case 'idiot':
+      body = (
+        <>
+          {head('白痴', '被放逐时可以亮明身份免死一次', 'text-pink-300')}
+          <IdiotPanel send={send} />
+        </>
+      )
+      break
   }
   return <div className="-mx-1 min-h-0 space-y-3 overflow-y-auto px-1">{body}</div>
 }
@@ -327,7 +335,7 @@ function Seat({ g, seat, side, peek, isJudge }: { g: GameView; seat: number; sid
     if (h) marks.push(<span key="seer">{h.result === 'good' ? '👍' : '👎'}</span>)
   }
   // 投票
-  if (g.vote && ['voting', 'vote_result'].includes(g.phase)) {
+  if (g.vote && ['voting', 'vote_result', 'idiot'].includes(g.phase)) {
     for (const s of g.vote.voters) {
       const b = g.vote.ballots[s]
       if (b?.choice === seat) marks.push(<SeatChip key={`v${s}`} seat={s} variant={b.confirmed ? 'solid' : 'dashed'} />)
@@ -337,6 +345,8 @@ function Seat({ g, seat, side, peek, isJudge }: { g: GameView; seat: number; sid
       tone = 'blood'
     }
   }
+  // 已亮明身份的白痴
+  if (g.idiotRevealed === seat) marks.push(<span key="idiot" className="rounded-full bg-pink-500/80 px-1.5 text-[9px] font-bold leading-4 text-white">已翻牌 · 无票</span>)
   // 法官与观战者：今晚将死亡
   if ((isJudge || g.watching) && p.pendingDeath) {
     overlay = <div className="absolute inset-0 flex items-center justify-center bg-red-900/60 font-display text-sm text-white">将死</div>
@@ -411,6 +421,9 @@ function PlayerDock({
     case 'hunter':
       main = big('开枪带人', onOpenAction, 'blood')
       break
+    case 'idiot':
+      main = big('是否亮明身份', onOpenAction)
+      break
     default:
       main = (
         <div className="flex items-center justify-center gap-2 py-2 text-sm text-gold-soft/80">
@@ -446,6 +459,7 @@ function statusText(g: GameView) {
     case 'day':
       return '白天自由发言，等待法官开始投票'
     case 'hunter':
+    case 'idiot':
       return '请稍候…'
     case 'vote_result':
       return g.vote?.result?.resolved ? '等待法官宣布天黑' : '平票，等待法官处理'

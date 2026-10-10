@@ -193,6 +193,9 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
     case 'hunter':
       body = <Info>等待 {seatName(g, g.hunter!.seat)}（猎人）选择是否带人…</Info>
       break
+    case 'idiot':
+      body = <Info>{seatName(g, g.idiot!.seat)} 是白痴，等待其决定是否亮明身份…</Info>
+      break
     case 'voting': {
       const v = g.vote!
       const done = v.voters.filter((s) => v.ballots[s]?.confirmed).length

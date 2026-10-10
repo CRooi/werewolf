@@ -9,6 +9,7 @@ export const ROLE_THEME: Record<ArtRole, { from: string; to: string; accent: str
   seer: { from: '#3b2a8a', to: '#0d0b2a', accent: '#b9a4ff' },
   witch: { from: '#1f5a46', to: '#06140f', accent: '#7ef0b8' },
   hunter: { from: '#7a4a1c', to: '#1a0f06', accent: '#ffbf6b' },
+  idiot: { from: '#7a1f5a', to: '#1a0612', accent: '#ff9ad5' },
   villager: { from: '#2e5a8a', to: '#0a1626', accent: '#9fd3ff' },
   judge: { from: '#8a6420', to: '#1e1406', accent: '#ffe08a' },
   unknown: { from: '#2a2f55', to: '#0c0f24', accent: '#e8b45a' },
@@ -65,6 +66,7 @@ export function RoleEmblem({ role, className }: { role: ArtRole; className?: str
       {role === 'seer' && <Seer id={id} />}
       {role === 'witch' && <Witch id={id} />}
       {role === 'hunter' && <Hunter id={id} />}
+      {role === 'idiot' && <Idiot id={id} />}
       {role === 'villager' && <Villager />}
       {role === 'judge' && <Judge />}
       {role === 'unknown' && <Unknown />}
@@ -161,6 +163,38 @@ function Witch({ id }: { id: string }) {
         <circle cx="81" cy="112.5" r="1.6" fill="#4c1d95" />
         <circle cx="85" cy="112.5" r="1.6" fill="#4c1d95" />
       </g>
+    </g>
+  )
+}
+
+/** 白痴：戴铃铛小丑帽的笑脸 */
+function Idiot({ id }: { id: string }) {
+  return (
+    <g>
+      {/* 脸 */}
+      <ellipse cx="60" cy="100" rx="27" ry="30" fill="#f5e6d3" stroke="#e8c9a8" strokeWidth="1" />
+      {/* 小丑帽：三个下垂的尖角 */}
+      <path
+        d="M30 86 C26 64 14 50 6 44 C24 42 36 54 42 68 C44 48 52 32 60 20 C68 32 76 48 78 68 C84 54 96 42 114 44 C106 50 94 64 90 86 Z"
+        fill="#c2185b"
+        stroke="#ff9ad5"
+        strokeWidth="1.2"
+      />
+      <path d="M42 68 C44 48 52 32 60 20 C68 32 76 48 78 68 Z" fill="#7b1fa2" />
+      <path d="M30 86 Q60 74 90 86 L90 93 Q60 81 30 93 Z" fill="#ffd166" />
+      {/* 铃铛 */}
+      <g filter={`url(#glow${id})`} fill="#ffd166">
+        <circle cx="6" cy="44" r="5" />
+        <circle cx="60" cy="20" r="5" />
+        <circle cx="114" cy="44" r="5" />
+      </g>
+      {/* 眯眼、腮红、大笑 */}
+      <path d="M45 104 Q50 98 55 104 M65 104 Q70 98 75 104" fill="none" stroke="#3a2a1a" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="42" cy="113" r="4.5" fill="#ff9ad5" opacity="0.65" />
+      <circle cx="78" cy="113" r="4.5" fill="#ff9ad5" opacity="0.65" />
+      <path d="M46 114 Q60 132 74 114 Q60 121 46 114 Z" fill="#c2185b" />
+      {/* 额头菱形 */}
+      <path d="M60 94 L63 98 L60 102 L57 98 Z" fill="#7b1fa2" />
     </g>
   )
 }

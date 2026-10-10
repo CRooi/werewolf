@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
-import type { ClientMessage, Role, RoomConfig } from '../../shared/types'
+import { GOD_ROLES, type ClientMessage, type Role, type RoomConfig } from '../../shared/types'
 import { Room } from './room'
 
-const cfg: RoomConfig = { werewolf: 2, seer: 1, witch: 1, hunter: 1, villager: 2, witchBothSameNight: false, witchSelfSave: false, allowSpectators: false }
+const cfg: RoomConfig = { werewolf: 2, seer: 1, witch: 1, hunter: 1, idiot: 0, villager: 2, witchBothSameNight: false, witchSelfSave: false, allowSpectators: false }
 
 function setup(config = cfg) {
   const { room, user: judge } = Room.create('1234', config, '法官')
@@ -304,4 +304,45 @@ test('wolf channel persists through the day; only alive wolves and judge can pos
   expect(() => as(5, { type: 'wolfChat', text: 'x' })).toThrow('你不能发言')
   const chat = room.view(room.d.game!.seats[1]!, () => true).game!.wolf!.chat
   expect(chat.slice(-2).map((m) => [m.label, m.text])).toEqual([['第1天', '白天别暴露'], ['第1天', '法官提醒']])
+})
+
+const IDIOT_ROLES: Role[] = ['werewolf', 'werewolf', 'seer', 'witch', 'idiot', 'villager', 'villager']
+
+test('idiot: reveal when voted out → immune, cannot vote nor be voted', () => {
+  const s = setup()
+  s.fixRoles(IDIOT_ROLES)
+  const { J, as, room } = s
+  const g = room.d.game!
+  night(s, 'none', { check: 0 })
+  J('voteStart')
+  vote(s, { 0: 4, 1: 4, 2: 4, 3: 'abstain', 4: 'abstain', 5: 'abstain', 6: 'abstain' })
+  expect(g.phase).toBe('idiot')
+  // 对外不透露是白痴
+  expect(room.view(g.seats[6]!, () => true).game!.idiot).toBeNull()
+  expect(room.view(g.seats[6]!, () => true).game!.vote!.result!.note).toBe('5号 得票最多，等待法官处理')
+  expect(() => as(5, { type: 'idiotDecide', reveal: true })).toThrow('你不是待决定的白痴')
+  as(4, { type: 'idiotDecide', reveal: true })
+  expect(g.alive[4]).toBe(true)
+  expect(g.idiotRevealed).toBe(4)
+  // 白痴算神职：屠边判定中计入神职
+  expect(GOD_ROLES).toContain('idiot')
+  expect(room.view(g.seats[6]!, () => true).game!.players[4]!.role).toBe('idiot')
+  night(s, 'none', { check: 1 })
+  expect(g.day).toBe(2)
+  J('voteStart')
+  expect(g.vote!.voters).not.toContain(4)
+  expect(() => as(0, { type: 'voteSelect', choice: 4 })).toThrow('不能被投票')
+})
+
+test('idiot: not revealing means exiled', () => {
+  const s = setup()
+  s.fixRoles(IDIOT_ROLES)
+  const { J, as, room } = s
+  night(s, 'none', { check: 0 })
+  J('voteStart')
+  vote(s, { 0: 4, 1: 4, 2: 4, 3: 'abstain', 4: 'abstain', 5: 'abstain', 6: 'abstain' })
+  as(4, { type: 'idiotDecide', reveal: false })
+  expect(room.d.game!.alive[4]).toBe(false)
+  expect(room.d.game!.idiotRevealed).toBeNull()
+  expect(room.d.game!.phase).toBe('vote_result')
 })

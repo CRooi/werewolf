@@ -17,6 +17,7 @@ export const PHASE_TITLE: Record<Phase, string> = {
   witch_act: '女巫请用药',
   day: '天亮了',
   hunter: '天亮了',
+  idiot: '投票结果',
   voting: '投票放逐',
   vote_result: '投票结果',
   game_over: '游戏结束',
@@ -26,13 +27,14 @@ export const PHASE_TITLE: Record<Phase, string> = {
 export const seatName = (g: GameView, seat: number) => `${seat + 1}号 ${g.players[seat]?.user.name ?? ''}`
 
 /** 玩家当前需要处理的操作；用于自动弹窗与震动提醒 */
-export type ActionKind = 'wolfOpen' | 'wolf' | 'seerOpen' | 'seer' | 'witchOpen' | 'witch' | 'vote' | 'hunter'
+export type ActionKind = 'wolfOpen' | 'wolf' | 'seerOpen' | 'seer' | 'witchOpen' | 'witch' | 'vote' | 'hunter' | 'idiot'
 
 export function pendingAction(g: GameView): { kind: ActionKind; key: string } | null {
   const me = g.mySeat
   if (me === null) return null
   const k = (kind: ActionKind, extra = '') => ({ kind, key: `${g.id}:${kind}:${g.day}${extra}` })
   if (g.phase === 'hunter' && g.hunter && g.hunter.seat === me && !g.hunter.done) return k('hunter')
+  if (g.phase === 'idiot' && g.idiot && g.idiot.seat === me) return k('idiot')
   if (!g.meAlive) return null
   switch (g.phase) {
     case 'wolf_wake':
