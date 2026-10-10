@@ -245,6 +245,7 @@ export type ClientMessage =
   | { type: 'disband' }
   | { type: 'updateConfig'; config: RoomConfig }
   | { type: 'start' }
+  | { type: 'abort' }
   | { type: 'judge'; step: JudgeStep }
   | { type: 'tieChoose'; seat: number }
   | { type: 'openEyes' }

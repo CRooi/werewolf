@@ -1,9 +1,19 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Eye, ScrollText } from 'lucide-react'
+import { Eye, ScrollText, Square } from 'lucide-react'
 import type { Announcement, ClientMessage, GameView, StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Scenery } from '@/components/art/Scenery'
 import { EyeClosed, EyeOpen, Paw } from '@/components/art/icons'
 import { ConnBadge } from '@/components/game/ConnBadge'
@@ -94,6 +104,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
   const [logOpen, setLogOpen] = useState(false)
   const [roleOpen, setRoleOpen] = useState(false)
   const [voteView, setVoteView] = useState(false)
+  const [confirmAbort, setConfirmAbort] = useState(false)
 
   const showReveal = g.phase === 'dealt' && !revealSeen
   const showResult = g.phase === 'revealed'
@@ -106,9 +117,16 @@ export function GameScreen({ state, status, send, onDone }: Props) {
           <span className="rounded-full bg-black/40 px-2.5 py-0.5 font-display text-sm text-gold-soft">房间 {state.room.code}</span>
           <ConnBadge status={status} />
         </div>
-        <button onClick={() => setLogOpen(true)} className="flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs text-gold-soft">
-          <ScrollText className="size-3.5" /> 记录
-        </button>
+        <div className="flex items-center gap-2">
+          {isJudge && state.room.inGame && (
+            <button onClick={() => setConfirmAbort(true)} className="flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs text-red-300">
+              <Square className="size-3" /> 终止
+            </button>
+          )}
+          <button onClick={() => setLogOpen(true)} className="flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs text-gold-soft">
+            <ScrollText className="size-3.5" /> 记录
+          </button>
+        </div>
       </header>
 
       <SeatTable
@@ -155,6 +173,20 @@ export function GameScreen({ state, status, send, onDone }: Props) {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={confirmAbort} onOpenChange={setConfirmAbort}>
+        <AlertDialogContent className="panel max-w-xs">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-xl">终止本局？</AlertDialogTitle>
+            <AlertDialogDescription>本局不计胜负，所有人回到房间</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>继续游戏</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-white" onClick={() => send({ type: 'abort' })}>
+              终止
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <LogDialog g={g} open={logOpen} onOpenChange={setLogOpen} />
       <MyRoleDialog g={g} isJudge={isJudge} open={roleOpen} onOpenChange={setRoleOpen} />
 

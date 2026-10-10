@@ -166,3 +166,12 @@ test('judge sees pending death before dawn, others do not', () => {
   expect(room.view(room.d.game!.seats[1]!, () => true).game!.players[0]!.role).toBe('werewolf')
   expect(room.view(room.d.game!.seats[5]!, () => true).game!.players[0]!.role).toBeUndefined()
 })
+
+test('judge can abort a game', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  expect(() => s.room.handle(s.room.d.seats[0]!, { type: 'abort' })).toThrow('只有法官')
+  s.room.handle(s.judge.id, { type: 'abort' })
+  expect(s.room.d.game).toBeNull()
+  expect(s.room.inGame).toBe(false)
+})

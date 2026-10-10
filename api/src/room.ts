@@ -300,6 +300,12 @@ export class Room {
         this.startGame()
         return {}
       }
+      case 'abort': {
+        needJudge()
+        if (!this.inGame) fail('当前没有进行中的对局')
+        this.d.game = null
+        return {}
+      }
       default:
         this.gameAction(userId, isJudge, msg)
         return {}
