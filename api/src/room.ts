@@ -1,6 +1,7 @@
 import {
   GOD_ROLES,
   JUDGE_CHAT_SEAT,
+  SPECTATOR_CHAT_SEAT,
   MAX_SPECTATORS,
   MAX_SEATS,
   ROLE_NAME,
@@ -46,7 +47,6 @@ interface NightState {
   wolfSel: Record<number, WolfChoice>
   wolfConfirmed: boolean
   wolfTarget: WolfChoice
-  chat: ChatMessage[]
   seerDone: boolean
   seerOpened: boolean
   seerSel: number | null
@@ -92,6 +92,10 @@ export interface GameState {
   hunterUsed: boolean
   announcements: Announcement[]
   judgeLog: string[]
+  /** 狼人频道：整局保留 */
+  wolfChat: ChatMessage[]
+  /** 观战频道：出局玩家、观战席与法官，整局保留 */
+  ghostChat: ChatMessage[]
   winner: Winner | null
   lastNightDeaths: number[] | null
 }
@@ -119,7 +123,6 @@ function freshNight(): NightState {
     wolfSel: {},
     wolfConfirmed: false,
     wolfTarget: null,
-    chat: [],
     seerDone: false,
     seerOpened: false,
     seerSel: null,
@@ -173,6 +176,10 @@ export class Room {
     // 兼容旧数据
     d.spectators ??= []
     d.config.allowSpectators ??= false
+    if (d.game) {
+      d.game.ghostChat ??= []
+      d.game.wolfChat ??= []
+    }
   }
 
   static create(code: string, config: RoomConfig, judgeName: string): { room: Room; user: User } {
@@ -247,7 +254,27 @@ export class Room {
       if (this.inGame) fail('游戏进行中')
     }
 
-    // 观战者只能看，唯一允许的操作是退出观战
+    // 观战频道：出局玩家、观战席与法官可发言
+    if (msg.type === 'ghostChat') {
+      const g = this.d.game
+      if (!g || g.phase === 'revealed') fail('游戏未开始')
+      const seat = g!.seats.indexOf(userId)
+      const spectator = this.isSpectator(userId)
+      if (!isJudge && !spectator && !(seat >= 0 && !g!.alive[seat])) fail('只有出局玩家、观战者和法官可以在观战频道发言')
+      const text = String(msg.text ?? '').trim().slice(0, 200)
+      if (!text) return {}
+      g!.ghostChat.push({
+        seat: isJudge ? JUDGE_CHAT_SEAT : spectator ? SPECTATOR_CHAT_SEAT : seat,
+        uid: userId,
+        label: this.phaseLabel(),
+        name: this.d.users[userId]!.name,
+        text,
+        ts: Date.now(),
+      })
+      return {}
+    }
+
+    // 观战者只能看，唯一允许的操作是退出观战（以及上面的观战频道）
     if (this.isSpectator(userId)) {
       if (msg.type === 'ping') return {}
       if (msg.type !== 'leave') fail('观战中只能观看，不能操作')
@@ -390,6 +417,8 @@ export class Room {
       hunterUsed: false,
       announcements: [],
       judgeLog: ['发牌完成'],
+      wolfChat: [],
+      ghostChat: [],
       winner: null,
       lastNightDeaths: null,
     }
@@ -418,6 +447,12 @@ export class Room {
 
   private log(text: string) {
     this.g().judgeLog.push(`第${this.g().day}${this.isNightPhase() ? '晚' : '天'}：${text}`)
+  }
+
+  /** 聊天消息的阶段标签 */
+  private phaseLabel() {
+    const g = this.g()
+    return g.phase === 'dealt' ? '开局' : `第${g.day}${this.isNightPhase() ? '夜' : '天'}`
   }
 
   private isNightPhase() {
@@ -476,10 +511,9 @@ export class Room {
       case 'wolfChat': {
         // 存活的狼人和法官可以在狼人频道发言
         if (!isJudge && (myRole !== 'werewolf' || !meAlive)) fail('你不能发言')
-        if (!['wolf_wake', 'wolf_pick'].includes(g.phase)) fail('现在不能交流')
         const text = String(msg.text ?? '').trim().slice(0, 200)
         if (!text) return
-        g.night.chat.push({ seat: isJudge ? JUDGE_CHAT_SEAT : mySeat, name: this.d.users[userId]!.name, text, ts: Date.now() })
+        g.wolfChat.push({ seat: isJudge ? JUDGE_CHAT_SEAT : mySeat, uid: userId, label: this.phaseLabel(), name: this.d.users[userId]!.name, text, ts: Date.now() })
         return
       }
       case 'wolfConfirm': {
@@ -893,6 +927,7 @@ export class Room {
       phase: g.phase,
       day: g.day,
       players,
+      myId: userId,
       mySeat,
       myRole,
       meAlive,
@@ -906,7 +941,7 @@ export class Room {
             selections: n.wolfSel,
             confirmed: n.wolfConfirmed,
             target: n.wolfTarget,
-            chat: n.chat,
+            chat: g.wolfChat,
           }
         : null,
       seer:
@@ -947,6 +982,7 @@ export class Room {
       witchDone: n.witchDone,
       announcements: g.announcements,
       judgeLog: isJudge || isSpectator || revealed ? g.judgeLog : null,
+      ghostChat: isJudge || watching ? g.ghostChat : null,
       winner: isJudge || isSpectator || revealed ? g.winner : null,
       lastNightDeaths: g.lastNightDeaths,
     }

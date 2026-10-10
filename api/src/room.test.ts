@@ -231,7 +231,8 @@ test('dead players can watch wolf / seer / witch actions; alive players cannot',
   const dead = room.view(g.seats[5]!, () => true).game!
   expect(dead.watching).toBe(true)
   expect(dead.wolf!.selections[0]).toBe(6)
-  expect(dead.wolf!.chat[0]!.text).toBe('刀6')
+  // 狼人频道整局保留，并带有阶段标签
+  expect(dead.wolf!.chat.map((m) => [m.label, m.text])).toEqual([['第1夜', '刀他'], ['第2夜', '刀6']])
   expect(dead.seer!.history).toEqual([{ day: 1, seat: 0, result: 'bad' }])
   expect(dead.witch).not.toBeNull()
   const alive = room.view(g.seats[6]!, () => true).game!
@@ -273,4 +274,34 @@ test('spectators: opt-in, max 5, god view, read-only', () => {
   // 法官可随时请出观战者
   room.handle(s.judge.id, { type: 'kick', userId: spec.id })
   expect(room.isSpectator(spec.id)).toBe(false)
+})
+
+test('ghost channel: dead players, spectators and judge only', () => {
+  const s = setup()
+  s.room.d.config.allowSpectators = true
+  const spec = s.room.spectate('看客')
+  s.fixRoles(ROLES)
+  night(s, 5, { check: 0 })
+  const { as, room, judge } = s
+  const g = room.d.game!
+  as(5, { type: 'ghostChat', text: '我是平民，冤' })
+  room.handle(spec.id, { type: 'ghostChat', text: '节哀' })
+  room.handle(judge.id, { type: 'ghostChat', text: '请保持安静' })
+  expect(() => as(6, { type: 'ghostChat', text: '我也想说' })).toThrow('只有出局玩家')
+  const chat = room.view(g.seats[5]!, () => true).game!.ghostChat!
+  expect(chat.map((m) => m.seat)).toEqual([5, -2, -1])
+  expect(room.view(spec.id, () => true).game!.ghostChat!.length).toBe(3)
+  expect(room.view(g.seats[6]!, () => true).game!.ghostChat).toBeNull()
+})
+
+test('wolf channel persists through the day; only alive wolves and judge can post', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  night(s, 5, { check: 0 })
+  const { as, room, judge } = s
+  as(0, { type: 'wolfChat', text: '白天别暴露' })
+  room.handle(judge.id, { type: 'wolfChat', text: '法官提醒' })
+  expect(() => as(5, { type: 'wolfChat', text: 'x' })).toThrow('你不能发言')
+  const chat = room.view(room.d.game!.seats[1]!, () => true).game!.wolf!.chat
+  expect(chat.slice(-2).map((m) => [m.label, m.text])).toEqual([['第1天', '白天别暴露'], ['第1天', '法官提醒']])
 })

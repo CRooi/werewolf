@@ -1,10 +1,8 @@
 import { useState, type ReactNode } from 'react'
-import { MessageSquare, Moon, Sun, Vote } from 'lucide-react'
+import { Moon, Sun, Vote } from 'lucide-react'
 import type { ClientMessage, GameView, JudgeStep } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { WolfChat } from './ActionPanels'
 import { seatName } from './helpers'
 
 type Send = (m: ClientMessage) => void
@@ -33,7 +31,6 @@ function StepButton({ s, children, disabled, variant = 'gold', onStep }: StepBut
 
 /** 法官控制台：根据阶段显示下一步按钮与进度 */
 export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
-  const [chatOpen, setChatOpen] = useState(false)
   const [choosingTie, setChoosingTie] = useState(false)
   const step = (s: JudgeStep) => send({ type: 'judge', step: s })
 
@@ -267,24 +264,5 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
       break
   }
 
-  const showChat = !!w && ['wolf_wake', 'wolf_pick'].includes(g.phase)
-
-  return (
-    <div className="space-y-2">
-      {body}
-      {showChat && (
-        <button className="mx-auto flex items-center gap-1 text-xs text-red-300" onClick={() => setChatOpen(true)}>
-          <MessageSquare className="size-3.5" /> 狼人频道（{w!.chat.length}）
-        </button>
-      )}
-      <Dialog open={chatOpen && showChat} onOpenChange={setChatOpen}>
-        <DialogContent className="panel max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="font-display">狼人频道</DialogTitle>
-          </DialogHeader>
-          <WolfChat g={g} send={send} />
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
+  return <div className="space-y-2">{body}</div>
 }

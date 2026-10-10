@@ -36,7 +36,7 @@ export const DEFAULT_CONFIG: RoomConfig = {
   hunter: 1,
   villager: 2,
   witchBothSameNight: false,
-  witchSelfSave: false,
+  witchSelfSave: true,
   allowSpectators: false,
 }
 
@@ -96,12 +96,18 @@ export interface PlayerView {
   pendingDeath?: boolean
 }
 
-/** 狼人频道里法官发言使用的座位号 */
+/** 频道里法官发言使用的座位号 */
 export const JUDGE_CHAT_SEAT = -1
+/** 观战频道里观战席发言使用的座位号 */
+export const SPECTATOR_CHAT_SEAT = -2
 
 export interface ChatMessage {
-  /** 发言者座位号；法官为 JUDGE_CHAT_SEAT */
+  /** 发言者座位号；法官为 JUDGE_CHAT_SEAT，观战席为 SPECTATOR_CHAT_SEAT */
   seat: number
+  /** 发言者用户 id，用于判断是否为自己的发言 */
+  uid?: string
+  /** 发言时所处的阶段，例如「第1夜」「第2天」，用于分段显示 */
+  label?: string
   name: string
   text: string
   ts: number
@@ -188,6 +194,8 @@ export interface GameView {
   phase: Phase
   day: number
   players: PlayerView[]
+  /** 自己的用户 id */
+  myId: string
   mySeat: number | null
   myRole: Role | null
   meAlive: boolean
@@ -207,6 +215,8 @@ export interface GameView {
   witchDone: boolean
   announcements: Announcement[]
   judgeLog: string[] | null
+  /** 观战频道（出局玩家、观战席、法官可见可发言），其他人为 null */
+  ghostChat: ChatMessage[] | null
   winner: Winner | null
   lastNightDeaths: number[] | null
 }
@@ -265,6 +275,7 @@ export type ClientMessage =
   | { type: 'openEyes' }
   | { type: 'wolfSelect'; choice: WolfChoice }
   | { type: 'wolfChat'; text: string }
+  | { type: 'ghostChat'; text: string }
   | { type: 'wolfConfirm' }
   | { type: 'seerSelect'; seat: number }
   | { type: 'seerConfirm' }

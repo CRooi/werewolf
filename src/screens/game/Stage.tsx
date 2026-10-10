@@ -1,4 +1,4 @@
-import type { Announcement, GameView, StateView } from '@shared/types'
+import type { Announcement, ClientMessage, GameView, StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { EyeClosed, EyeOpen } from '@/components/art/icons'
 import { WolfChat } from './ActionPanels'
@@ -32,7 +32,7 @@ function Sun() {
 const ANN_ICON: Record<Announcement['kind'], string> = { night: '🌙', vote: '⚖️', hunter: '🏹', info: '📜' }
 
 /** 座位下方的全宽舞台：当前阶段、公告与进度 */
-export function Stage({ state }: { state: StateView }) {
+export function Stage({ state, send }: { state: StateView; send: (m: ClientMessage) => void }) {
   const g = state.game as GameView
   const isJudge = state.me.isJudge
   const night = isNight(g.phase)
@@ -79,7 +79,7 @@ export function Stage({ state }: { state: StateView }) {
       {/* 内容区 */}
       <div className="flex flex-1 flex-col gap-2">
         {night && (isJudge || g.watching) && <NightSummary g={g} />}
-        {night && g.watching && g.wolf && ['wolf_wake', 'wolf_pick'].includes(g.phase) && <WolfChat g={g} readOnly />}
+        {night && (isJudge || g.watching) && g.wolf && ['wolf_wake', 'wolf_pick'].includes(g.phase) && <WolfChat g={g} send={isJudge ? send : undefined} readOnly={!isJudge} />}
         {dark && !isJudge && !(night && g.watching) && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-sm text-gold-soft/70">
             {g.phase === 'dealt' ? (state.me.isSpectator ? '身份已发放，所有身份已显示在座位上' : '身份已发放，记住你的身份，等待法官宣布天黑') : !g.meAlive ? '你已出局，请保持安静' : myTurn ? '轮到你了，请点击下方「睁眼」' : eyesOpenForMe ? '请按提示完成操作' : '夜幕笼罩村庄，请安静等待…'}

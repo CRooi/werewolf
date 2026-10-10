@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Ban, Check, Send } from 'lucide-react'
-import { JUDGE_CHAT_SEAT, type ClientMessage, type GameView } from '@shared/types'
+import { JUDGE_CHAT_SEAT, SPECTATOR_CHAT_SEAT, type ChatMessage, type ClientMessage, type GameView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -139,58 +139,105 @@ function PawChip({ seat }: { seat: number }) {
   )
 }
 
-export function WolfChat({ g, send, readOnly }: { g: GameView; send?: Send; readOnly?: boolean }) {
+/** 发言者标签：法官 / 观战席 / 座位号 */
+function speakerLabel(m: ChatMessage) {
+  if (m.seat === JUDGE_CHAT_SEAT) return '⚖️ 法官'
+  if (m.seat === SPECTATOR_CHAT_SEAT) return `👁 ${m.name}`
+  return `${m.seat + 1}号 ${m.name}`
+}
+
+/** 通用频道聊天框 */
+export function ChatBox({
+  title,
+  messages,
+  selfId,
+  onSend,
+  tone = 'blood',
+  placeholder = '说点什么',
+  emptyText = '还没有人发言',
+  listClassName = 'max-h-36 min-h-16',
+}: {
+  title?: string
+  messages: ChatMessage[]
+  /** 自己的用户 id，用于把自己的发言靠右显示 */
+  selfId: string
+  onSend?: (text: string) => void
+  tone?: 'blood' | 'mystic'
+  placeholder?: string
+  emptyText?: string
+  listClassName?: string
+}) {
   const [text, setText] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
-  const chat = g.wolf?.chat ?? []
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
-  }, [chat.length])
+  }, [messages.length])
   const submit = () => {
-    if (!text.trim() || !send) return
-    send({ type: 'wolfChat', text })
+    if (!text.trim() || !onSend) return
+    onSend(text)
     setText('')
   }
+  const t =
+    tone === 'blood'
+      ? { border: 'border-blood/30', line: 'border-blood/20', title: 'text-red-300', mine: 'bg-blood/70 text-white', label: 'text-red-300' }
+      : { border: 'border-mystic/30', line: 'border-mystic/20', title: 'text-purple-300', mine: 'bg-mystic/70 text-white', label: 'text-purple-300' }
   return (
-    <div className="rounded-xl border border-blood/30 bg-black/40">
-      <div className="border-b border-blood/20 px-3 py-1.5 font-display text-xs text-red-300">🐺 狼人频道</div>
-      <div ref={listRef} className="max-h-36 min-h-16 space-y-1.5 overflow-y-auto p-2">
-        {chat.length === 0 && <div className="py-3 text-center text-xs text-muted-foreground">悄悄商量一下吧…</div>}
-        {chat.map((m, i) => {
+    <div className={cn('rounded-xl border bg-black/40', t.border)}>
+      {title && <div className={cn('border-b px-3 py-1.5 font-display text-xs', t.line, t.title)}>{title}</div>}
+      <div ref={listRef} className={cn('space-y-1.5 overflow-y-auto p-2', listClassName)}>
+        {messages.length === 0 && <div className="py-3 text-center text-xs text-muted-foreground">{emptyText}</div>}
+        {messages.map((m, i) => {
           const fromJudge = m.seat === JUDGE_CHAT_SEAT
-          // 法官视角 mySeat 为 null，自己的发言即法官发言
-          const mine = m.seat === (g.mySeat ?? JUDGE_CHAT_SEAT)
+          const mine = m.uid === selfId
+          const newSection = m.label && m.label !== messages[i - 1]?.label
           return (
-            <div key={i} className={cn('flex', mine && 'justify-end')}>
+            <Fragment key={i}>
+            {newSection && <div className="divider-ornament py-0.5 text-[10px]">{m.label}</div>}
+            <div className={cn('flex', mine && 'justify-end')}>
               <div
                 className={cn(
                   'max-w-[85%] rounded-xl px-2.5 py-1 text-sm',
-                  mine ? (fromJudge ? 'bg-gold/80 text-[#2a1a05]' : 'bg-blood/70 text-white') : fromJudge ? 'border border-gold/40 bg-gold/15' : 'bg-white/10',
+                  mine ? (fromJudge ? 'bg-gold/80 text-[#2a1a05]' : t.mine) : fromJudge ? 'border border-gold/40 bg-gold/15' : 'bg-white/10',
                 )}
               >
-                {!mine && <span className={cn('mr-1 text-[10px]', fromJudge ? 'text-gold' : 'text-red-300')}>{fromJudge ? '⚖️ 法官' : `${m.seat + 1}号 ${m.name}`}</span>}
+                {!mine && <span className={cn('mr-1 text-[10px]', fromJudge ? 'text-gold' : t.label)}>{speakerLabel(m)}</span>}
                 {m.text}
               </div>
             </div>
+            </Fragment>
           )
         })}
       </div>
-      {!readOnly && (
-        <div className="flex gap-2 border-t border-blood/20 p-2">
+      {onSend && (
+        <div className={cn('flex gap-2 border-t p-2', t.line)}>
           <Input
             value={text}
             maxLength={200}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && submit()}
-            placeholder={g.mySeat === null ? '以法官身份发言' : '和同伴说点什么'}
+            placeholder={placeholder}
             className="h-9 bg-black/30"
           />
-          <Button size="icon-lg" variant="blood" onClick={submit} aria-label="发送">
+          <Button size="icon-lg" variant={tone} onClick={submit} aria-label="发送">
             <Send />
           </Button>
         </div>
       )}
     </div>
+  )
+}
+
+/** 狼人频道 */
+export function WolfChat({ g, send, readOnly }: { g: GameView; send?: Send; readOnly?: boolean }) {
+  return (
+    <ChatBox
+      title="🐺 狼人频道"
+      messages={g.wolf?.chat ?? []}
+      selfId={g.myId}
+      onSend={readOnly || !send ? undefined : (text) => send({ type: 'wolfChat', text })}
+      placeholder={g.mySeat === null ? '以法官身份发言' : '和同伴说点什么'}
+      emptyText="悄悄商量一下吧…"
+    />
   )
 }
 

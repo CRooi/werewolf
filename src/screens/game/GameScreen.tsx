@@ -23,7 +23,7 @@ import { SeatTable } from '@/components/game/SeatTable'
 import { WatchBanner } from '@/components/game/WatchBanner'
 import type { ConnStatus } from '@/hooks/useRoomSocket'
 import { tabKey } from '@/lib/session'
-import { HunterPanel, SeerPanel, VoteBoard, WitchPanel, WolfPanel } from './ActionPanels'
+import { ChatBox, HunterPanel, SeerPanel, VoteBoard, WitchPanel, WolfPanel } from './ActionPanels'
 import { isNight, pendingAction, vibrate, type ActionKind } from './helpers'
 import { JudgeDock } from './JudgeDock'
 import { AnnouncementOverlay, IdentityReveal, LogDialog, MyRoleDialog, ResultOverlay } from './Overlays'
@@ -134,13 +134,15 @@ export function GameScreen({ state, status, send, onDone }: Props) {
         </div>
       </header>
 
+      <ChannelBar g={g} isJudge={isJudge} send={send} />
+
       <SeatTable
         count={g.players.length}
         renderSeat={(seat, side) => <Seat g={g} seat={seat} side={side} peek={peek} isJudge={isJudge} />}
       />
 
       <div className="mt-3 flex flex-1 flex-col">
-        <Stage state={state} />
+        <Stage state={state} send={send} />
       </div>
 
       {/* 底部操作区 */}
@@ -454,6 +456,88 @@ function statusText(g: GameView) {
     default:
       return isNight(g.phase) ? '天黑请闭眼…' : ''
   }
+}
+
+type Channel = 'wolf' | 'ghost'
+
+/**
+ * 频道入口：狼人频道（狼人、法官、观战者可见）与观战频道（出局玩家、观战席、法官）。
+ * 点击后弹窗展示，带未读数；刀人阶段狼人频道另在选人弹窗/舞台上常驻展示。
+ */
+function ChannelBar({ g, isJudge, send }: { g: GameView; isJudge: boolean; send: (m: ClientMessage) => void }) {
+  const wolfMsgs = g.wolf?.chat ?? null
+  const ghostMsgs = g.ghostChat
+  const [open, setOpen] = useState<Channel | null>(null)
+  const [seen, setSeen] = useState(() => ({ wolf: wolfMsgs?.length ?? 0, ghost: ghostMsgs?.length ?? 0 }))
+
+  // 刀人阶段狼人频道已常驻展示，视为已读
+  const wolfInline = (isJudge || g.watching) ? ['wolf_wake', 'wolf_pick'].includes(g.phase) : g.myRole === 'werewolf' && g.phase === 'wolf_pick'
+  const wolfLen = wolfMsgs?.length ?? 0
+  const ghostLen = ghostMsgs?.length ?? 0
+  // 正在查看的频道随新消息同步为已读（渲染期间调整状态，避免 effect 里 setState）
+  const wolfSeen = open === 'wolf' || wolfInline ? wolfLen : seen.wolf
+  const ghostSeen = open === 'ghost' ? ghostLen : seen.ghost
+  if (wolfSeen !== seen.wolf || ghostSeen !== seen.ghost) setSeen({ wolf: wolfSeen, ghost: ghostSeen })
+
+  if (!wolfMsgs && !ghostMsgs) return null
+  const canWolfSend = isJudge || (g.myRole === 'werewolf' && g.meAlive)
+
+  const chip = (k: Channel, label: string, unread: number, cls: string) => (
+    <button
+      type="button"
+      onClick={() => setOpen(k)}
+      className={cn('relative flex flex-1 items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition active:scale-95', cls)}
+    >
+      {label}
+      {unread > 0 && (
+        <span className="absolute -top-1.5 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          {unread > 99 ? '99+' : unread}
+        </span>
+      )}
+    </button>
+  )
+
+  return (
+    <>
+      <div className="mb-2 flex gap-2">
+        {wolfMsgs && chip('wolf', canWolfSend ? '🐺 狼人频道' : '🐺 狼人频道（只读）', wolfLen - wolfSeen, 'border-blood/40 bg-blood/15 text-red-200')}
+        {ghostMsgs && chip('ghost', '👁 观战频道', ghostLen - ghostSeen, 'border-mystic/40 bg-mystic/15 text-purple-200')}
+      </div>
+      <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)}>
+        <DialogContent className="panel max-w-md">
+          <DialogHeader>
+            <DialogTitle className={cn('font-display text-xl', open === 'wolf' ? 'text-red-300' : 'text-purple-300')}>
+              {open === 'wolf' ? '🐺 狼人频道' : '👁 观战频道'}
+            </DialogTitle>
+            <DialogDescription>
+              {open === 'wolf' ? (canWolfSend ? '狼人与法官可发言，出局玩家与观战者只能看' : '你只能查看，不能发言') : '出局玩家、观战者与法官可见，请勿向场上玩家透露'}
+            </DialogDescription>
+          </DialogHeader>
+          {open === 'wolf' && wolfMsgs && (
+            <ChatBox
+              messages={wolfMsgs}
+              selfId={g.myId}
+              onSend={canWolfSend ? (text) => send({ type: 'wolfChat', text }) : undefined}
+              placeholder={isJudge ? '以法官身份发言' : '和同伴说点什么'}
+              emptyText="狼人频道还没有消息"
+              listClassName="h-[50dvh]"
+            />
+          )}
+          {open === 'ghost' && ghostMsgs && (
+            <ChatBox
+              tone="mystic"
+              messages={ghostMsgs}
+              selfId={g.myId}
+              onSend={(text) => send({ type: 'ghostChat', text })}
+              placeholder={isJudge ? '以法官身份发言' : '和其他观战者聊聊'}
+              emptyText="观战频道还没有消息"
+              listClassName="h-[50dvh]"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }
 
 /** 观战席底栏：只能看，不能操作 */
