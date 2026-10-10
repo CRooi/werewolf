@@ -518,8 +518,9 @@ export class Room {
         return
       }
       case 'wolfChat': {
-        // 存活的狼人和法官可以在狼人频道发言
+        // 存活的狼人和法官可以在狼人频道发言，且只能在夜间
         if (!isJudge && (myRole !== 'werewolf' || !meAlive)) fail('你不能发言')
+        if (!this.isNightPhase()) fail('狼人频道只能在夜晚发言')
         const text = String(msg.text ?? '').trim().slice(0, 200)
         if (!text) return
         g.wolfChat.push({ seat: isJudge ? JUDGE_CHAT_SEAT : mySeat, uid: userId, label: this.phaseLabel(), name: this.d.users[userId]!.name, text, ts: Date.now() })
@@ -962,7 +963,8 @@ export class Room {
     })
 
     const wolfSeats = g.roles.map((r, i) => (r === 'werewolf' ? i : -1)).filter((i) => i >= 0)
-    const showWolf = godView || isWolf
+    // 公布结果后，所有人都能回看各频道记录
+    const showWolf = godView || isWolf || revealed
     const seerSeat = g.roles.indexOf('seer')
     const witchSeat = g.roles.indexOf('witch')
     const victim = typeof n.wolfTarget === 'number' ? n.wolfTarget : null
@@ -1030,7 +1032,7 @@ export class Room {
       witchDone: n.witchDone,
       announcements: g.announcements,
       judgeLog: isJudge || isSpectator || revealed ? g.judgeLog : null,
-      ghostChat: isJudge || watching ? g.ghostChat : null,
+      ghostChat: isJudge || watching || revealed ? g.ghostChat : null,
       winner: isJudge || isSpectator || revealed ? g.winner : null,
       lastNightDeaths: g.lastNightDeaths,
     }

@@ -108,6 +108,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
   const [roleOpen, setRoleOpen] = useState(false)
   const [voteView, setVoteView] = useState(false)
   const [confirmAbort, setConfirmAbort] = useState(false)
+  const [channel, setChannel] = useState<Channel | null>(null)
 
   const isSpectator = state.me.isSpectator
   const showReveal = g.phase === 'dealt' && !revealSeen && !isSpectator
@@ -134,7 +135,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
         </div>
       </header>
 
-      <ChannelBar g={g} isJudge={isJudge} send={send} />
+      <ChannelBar g={g} isJudge={isJudge} send={send} open={channel} setOpen={setChannel} />
 
       <SeatTable
         count={g.players.length}
@@ -211,7 +212,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
         />
       )}
       {!showReveal && !showResult && annQueue.length > 0 && <AnnouncementOverlay items={annQueue} g={g} onClose={() => setAnnQueue([])} />}
-      {showResult && <ResultOverlay g={g} onNext={onDone} onLog={() => setLogOpen(true)} />}
+      {showResult && <ResultOverlay g={g} onNext={onDone} onLog={() => setLogOpen(true)} onOpenChannel={setChannel} />}
     </div>
   )
 }
@@ -472,16 +473,27 @@ function statusText(g: GameView) {
   }
 }
 
-type Channel = 'wolf' | 'ghost'
+export type Channel = 'wolf' | 'ghost'
 
 /**
  * 频道入口：狼人频道（狼人、法官、观战者可见）与观战频道（出局玩家、观战席、法官）。
  * 点击后弹窗展示，带未读数；刀人阶段狼人频道另在选人弹窗/舞台上常驻展示。
  */
-function ChannelBar({ g, isJudge, send }: { g: GameView; isJudge: boolean; send: (m: ClientMessage) => void }) {
+function ChannelBar({
+  g,
+  isJudge,
+  send,
+  open,
+  setOpen,
+}: {
+  g: GameView
+  isJudge: boolean
+  send: (m: ClientMessage) => void
+  open: Channel | null
+  setOpen: (c: Channel | null) => void
+}) {
   const wolfMsgs = g.wolf?.chat ?? null
   const ghostMsgs = g.ghostChat
-  const [open, setOpen] = useState<Channel | null>(null)
   const [seen, setSeen] = useState(() => ({ wolf: wolfMsgs?.length ?? 0, ghost: ghostMsgs?.length ?? 0 }))
 
   // 刀人阶段狼人频道已常驻展示，视为已读
@@ -494,7 +506,10 @@ function ChannelBar({ g, isJudge, send }: { g: GameView; isJudge: boolean; send:
   if (wolfSeen !== seen.wolf || ghostSeen !== seen.ghost) setSeen({ wolf: wolfSeen, ghost: ghostSeen })
 
   if (!wolfMsgs && !ghostMsgs) return null
-  const canWolfSend = isJudge || (g.myRole === 'werewolf' && g.meAlive)
+  const ended = g.phase === 'revealed'
+  const canWolfSpeak = !ended && (isJudge || (g.myRole === 'werewolf' && g.meAlive))
+  // 狼人频道只能在夜晚发言
+  const canWolfSend = canWolfSpeak && isNight(g.phase)
 
   const chip = (k: Channel, label: string, unread: number, cls: string) => (
     <button
@@ -514,7 +529,7 @@ function ChannelBar({ g, isJudge, send }: { g: GameView; isJudge: boolean; send:
   return (
     <>
       <div className="mb-2 flex gap-2">
-        {wolfMsgs && chip('wolf', canWolfSend ? '🐺 狼人频道' : '🐺 狼人频道（只读）', wolfLen - wolfSeen, 'border-blood/40 bg-blood/15 text-red-200')}
+        {wolfMsgs && chip('wolf', canWolfSpeak ? '🐺 狼人频道' : '🐺 狼人频道（只读）', wolfLen - wolfSeen, 'border-blood/40 bg-blood/15 text-red-200')}
         {ghostMsgs && chip('ghost', '👁 观战频道', ghostLen - ghostSeen, 'border-mystic/40 bg-mystic/15 text-purple-200')}
       </div>
       <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)}>
@@ -524,7 +539,7 @@ function ChannelBar({ g, isJudge, send }: { g: GameView; isJudge: boolean; send:
               {open === 'wolf' ? '🐺 狼人频道' : '👁 观战频道'}
             </DialogTitle>
             <DialogDescription>
-              {open === 'wolf' ? (canWolfSend ? '狼人与法官可发言，出局玩家与观战者只能看' : '你只能查看，不能发言') : '出局玩家、观战者与法官可见，请勿向场上玩家透露'}
+              {open === 'wolf' ? (canWolfSpeak ? '夜晚狼人与法官可发言，白天只能查看' : '你只能查看，不能发言') : '出局玩家、观战者与法官可见，请勿向场上玩家透露'}
             </DialogDescription>
           </DialogHeader>
           {open === 'wolf' && wolfMsgs && (
@@ -532,6 +547,7 @@ function ChannelBar({ g, isJudge, send }: { g: GameView; isJudge: boolean; send:
               messages={wolfMsgs}
               selfId={g.myId}
               onSend={canWolfSend ? (text) => send({ type: 'wolfChat', text }) : undefined}
+              notice={ended ? '游戏已结束，仅可查看' : canWolfSpeak && !canWolfSend ? '白天不能发言，天黑后再商量' : undefined}
               placeholder={isJudge ? '以法官身份发言' : '和同伴说点什么'}
               emptyText="狼人频道还没有消息"
               listClassName="h-[50dvh]"
@@ -542,7 +558,8 @@ function ChannelBar({ g, isJudge, send }: { g: GameView; isJudge: boolean; send:
               tone="mystic"
               messages={ghostMsgs}
               selfId={g.myId}
-              onSend={(text) => send({ type: 'ghostChat', text })}
+              onSend={ended ? undefined : (text) => send({ type: 'ghostChat', text })}
+              notice={ended ? '游戏已结束，仅可查看' : undefined}
               placeholder={isJudge ? '以法官身份发言' : '和其他观战者聊聊'}
               emptyText="观战频道还没有消息"
               listClassName="h-[50dvh]"

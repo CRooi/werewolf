@@ -156,6 +156,7 @@ export function ChatBox({
   placeholder = '说点什么',
   emptyText = '还没有人发言',
   listClassName = 'max-h-36 min-h-16',
+  notice,
 }: {
   title?: string
   messages: ChatMessage[]
@@ -166,6 +167,8 @@ export function ChatBox({
   placeholder?: string
   emptyText?: string
   listClassName?: string
+  /** 不能发言时在输入框位置显示的提示 */
+  notice?: string
 }) {
   const [text, setText] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
@@ -208,6 +211,7 @@ export function ChatBox({
           )
         })}
       </div>
+      {!onSend && notice && <div className={cn('border-t px-3 py-2.5 text-center text-xs text-muted-foreground', t.line)}>{notice}</div>}
       {onSend && (
         <div className={cn('flex gap-2 border-t p-2', t.line)}>
           <Input

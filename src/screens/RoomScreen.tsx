@@ -45,5 +45,20 @@ export function RoomScreen({ session, onExit }: { session: Session; onExit: () =
       />
     )
   }
-  return <Lobby state={state} status={status} send={send} />
+  const canReview = game?.phase === 'revealed'
+  return (
+    <Lobby
+      state={state}
+      status={status}
+      send={send}
+      onReview={
+        canReview
+          ? () => {
+              sessionStorage.removeItem(DISMISS_KEY)
+              setDismissed(null)
+            }
+          : undefined
+      }
+    />
+  )
 }

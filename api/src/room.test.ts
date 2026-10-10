@@ -294,16 +294,21 @@ test('ghost channel: dead players, spectators and judge only', () => {
   expect(room.view(g.seats[6]!, () => true).game!.ghostChat).toBeNull()
 })
 
-test('wolf channel persists through the day; only alive wolves and judge can post', () => {
+test('wolf channel persists across nights but only allows posting at night', () => {
   const s = setup()
   s.fixRoles(ROLES)
   night(s, 5, { check: 0 })
-  const { as, room, judge } = s
-  as(0, { type: 'wolfChat', text: '白天别暴露' })
-  room.handle(judge.id, { type: 'wolfChat', text: '法官提醒' })
+  const { J, as, room, judge } = s
+  // 白天不能发言（狼人和法官都不行），但历史记录仍可见
+  expect(() => as(0, { type: 'wolfChat', text: '白天别暴露' })).toThrow('只能在夜晚发言')
+  expect(() => room.handle(judge.id, { type: 'wolfChat', text: '法官提醒' })).toThrow('只能在夜晚发言')
   expect(() => as(5, { type: 'wolfChat', text: 'x' })).toThrow('你不能发言')
+  J('voteStart')
+  vote(s, { 0: 'abstain', 1: 'abstain', 2: 'abstain', 3: 'abstain', 4: 'abstain', 6: 'abstain' })
+  J('nightStart')
+  as(0, { type: 'wolfChat', text: '今晚刀谁' })
   const chat = room.view(room.d.game!.seats[1]!, () => true).game!.wolf!.chat
-  expect(chat.slice(-2).map((m) => [m.label, m.text])).toEqual([['第1天', '白天别暴露'], ['第1天', '法官提醒']])
+  expect(chat.map((m) => [m.label, m.text])).toEqual([['第1夜', '刀他'], ['第2夜', '今晚刀谁']])
 })
 
 const IDIOT_ROLES: Role[] = ['werewolf', 'werewolf', 'seer', 'witch', 'idiot', 'villager', 'villager']
@@ -345,4 +350,22 @@ test('idiot: not revealing means exiled', () => {
   expect(room.d.game!.alive[4]).toBe(false)
   expect(room.d.game!.idiotRevealed).toBeNull()
   expect(room.d.game!.phase).toBe('vote_result')
+})
+
+test('after reveal, everyone can read all channels', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  night(s, 5, { check: 0 })
+  const { as, room, J } = s
+  as(5, { type: 'ghostChat', text: '我死得冤' })
+  const alive = () => room.view(room.d.game!.seats[6]!, () => true).game!
+  expect(alive().wolf).toBeNull()
+  expect(alive().ghostChat).toBeNull()
+  room.d.game!.phase = 'game_over'
+  room.d.game!.winner = 'good'
+  J('reveal')
+  expect(alive().wolf!.chat.map((m) => m.text)).toEqual(['刀他'])
+  expect(alive().ghostChat!.map((m) => m.text)).toEqual(['我死得冤'])
+  // 结束后不能再发言
+  expect(() => as(5, { type: 'ghostChat', text: 'x' })).toThrow('游戏未开始')
 })

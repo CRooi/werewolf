@@ -74,7 +74,17 @@ export function AnnouncementOverlay({ items, g, onClose }: { items: Announcement
 }
 
 /** 公布结果：胜负 + 全员身份 */
-export function ResultOverlay({ g, onNext, onLog }: { g: GameView; onNext: () => void; onLog: () => void }) {
+export function ResultOverlay({
+  g,
+  onNext,
+  onLog,
+  onOpenChannel,
+}: {
+  g: GameView
+  onNext: () => void
+  onLog: () => void
+  onOpenChannel: (c: 'wolf' | 'ghost') => void
+}) {
   const wolfWin = g.winner === 'wolf'
   const me = g.mySeat !== null ? g.players[g.mySeat] : null
   const iWon = me?.role ? (me.role === 'werewolf') === wolfWin : null
@@ -98,7 +108,21 @@ export function ResultOverlay({ g, onNext, onLog }: { g: GameView; onNext: () =>
           </div>
         ))}
       </div>
-      <div className="mx-auto mt-6 flex w-full max-w-md gap-2">
+      {(g.wolf || g.ghostChat) && (
+        <div className="mx-auto mt-6 flex w-full max-w-md gap-2">
+          {g.wolf && (
+            <Button variant="stone" size="lg2" className="flex-1 text-red-200" onClick={() => onOpenChannel('wolf')}>
+              🐺 狼人频道（{g.wolf.chat.length}）
+            </Button>
+          )}
+          {g.ghostChat && (
+            <Button variant="stone" size="lg2" className="flex-1 text-purple-200" onClick={() => onOpenChannel('ghost')}>
+              👁 观战频道（{g.ghostChat.length}）
+            </Button>
+          )}
+        </div>
+      )}
+      <div className="mx-auto mt-3 flex w-full max-w-md gap-2">
         <Button variant="stone" size="xl" className="flex-1" onClick={onLog}>
           复盘
         </Button>

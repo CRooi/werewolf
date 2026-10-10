@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeftRight, Copy, Eye, LogOut, Play, Settings2, Trash2, UserX, X } from 'lucide-react'
+import { ArrowLeftRight, Copy, Eye, History, LogOut, Play, Settings2, Trash2, UserX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAX_SPECTATORS, ROLE_NAME, ROLE_ORDER, seatCount, type ClientMessage, type RoomConfig, type StateView, type UserBrief } from '@shared/types'
 import { cn } from '@/lib/utils'
@@ -28,9 +28,11 @@ interface Props {
   state: StateView
   status: ConnStatus
   send: (m: ClientMessage) => void
+  /** 有已结束的上一局时，可回看结果与频道记录 */
+  onReview?: () => void
 }
 
-export function Lobby({ state, status, send }: Props) {
+export function Lobby({ state, status, send, onReview }: Props) {
   const { me, room } = state
   const [target, setTarget] = useState<{ user: UserBrief; seat: number | null } | null>(null)
   const [editing, setEditing] = useState<RoomConfig | null>(null)
@@ -76,7 +78,14 @@ export function Lobby({ state, status, send }: Props) {
         <button onClick={() => setConfirmExit(true)} className="flex items-center gap-1 text-xs text-muted-foreground">
           <LogOut className="size-4" /> {me.isJudge ? '解散' : me.isSpectator ? '退出观战' : '退出'}
         </button>
-        <ConnBadge status={status} />
+        <div className="flex items-center gap-3">
+          {onReview && (
+            <button onClick={onReview} className="flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs text-gold-soft">
+              <History className="size-3.5" /> 回看上一局
+            </button>
+          )}
+          <ConnBadge status={status} />
+        </div>
       </header>
 
       <button onClick={share} className="panel mx-auto mb-3 flex items-center gap-3 px-5 py-2 active:scale-95 transition">
