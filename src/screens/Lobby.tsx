@@ -98,45 +98,50 @@ export function Lobby({ state, status, send }: Props) {
             />
           )
         }}
-        center={
-          <div className="panel flex flex-1 flex-col items-center gap-2 p-2 text-center">
-            <div className="text-[11px] tracking-widest text-gold-soft/70">法官</div>
-            <button
-              className="flex flex-col items-center"
-              onClick={() => room.judge.id !== me.id && setTarget({ user: room.judge, seat: null })}
-            >
-              <RoleCard role="judge" size="sm" className="w-14" />
-              <div className="mt-1 max-w-24 truncate text-sm">
-                {room.judge.name}
-                {me.isJudge && <span className="text-[10px] text-gold">(我)</span>}
-              </div>
-              {!room.judge.online && <div className="text-[10px] text-muted-foreground">离线</div>}
-            </button>
-            <div className="divider-ornament w-full text-[10px]">✦</div>
-            <div className="flex flex-wrap justify-center gap-1">
-              {ROLE_ORDER.filter((r) => room.config[r] > 0).map((r) => (
-                <span key={r} className="rounded-full bg-black/40 px-2 py-0.5 text-[11px] text-gold-soft">
-                  {ROLE_NAME[r]}×{room.config[r]}
-                </span>
-              ))}
-            </div>
-            {room.config.witch > 0 && (
-              <div className="text-[10px] leading-relaxed text-muted-foreground">
-                {room.config.witchBothSameNight ? '双药可同晚' : '双药二选一'} · {room.config.witchSelfSave ? '可自救' : '不可自救'}
-              </div>
-            )}
-            <div className="mt-auto font-display text-2xl text-gold-soft">
-              {filled}/{total}
-            </div>
-            <div className="text-[10px] text-muted-foreground">{full ? '人已到齐' : '等待玩家入座'}</div>
-          </div>
-        }
       />
 
-      <p className="mt-3 text-center text-xs text-muted-foreground">
-        <ArrowLeftRight className="mr-1 inline size-3" />
-        点击空位换座，点击其他玩家或法官可请求交换位置
-      </p>
+      {/* 法官与板子信息 */}
+      <div className="panel mt-3 flex flex-1 flex-col gap-3 p-4">
+        <div className="flex items-center gap-3">
+          <button
+            className="flex shrink-0 items-center gap-3 text-left active:scale-95 transition"
+            onClick={() => room.judge.id !== me.id && setTarget({ user: room.judge, seat: null })}
+          >
+            <RoleCard role="judge" size="sm" className="w-14" />
+            <div>
+              <div className="text-xs tracking-widest text-gold-soft/70">法官</div>
+              <div className="max-w-32 truncate font-display text-xl">
+                {room.judge.name}
+                {me.isJudge && <span className="ml-1 font-sans text-xs text-gold">(我)</span>}
+              </div>
+              {!room.judge.online && <div className="text-[11px] text-muted-foreground">离线</div>}
+            </div>
+          </button>
+          <div className="ml-auto text-right">
+            <div className="font-display text-4xl leading-none text-gold-grad">
+              {filled}/{total}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{full ? '人已到齐' : '等待玩家入座'}</div>
+          </div>
+        </div>
+        <div className="divider-ornament text-[10px]">✦ 本局板子 ✦</div>
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {ROLE_ORDER.filter((r) => room.config[r] > 0).map((r) => (
+            <span key={r} className="rounded-full border border-gold/20 bg-black/40 px-3 py-1 text-sm text-gold-soft">
+              {ROLE_NAME[r]} × {room.config[r]}
+            </span>
+          ))}
+        </div>
+        {room.config.witch > 0 && (
+          <div className="text-center text-xs text-muted-foreground">
+            女巫：{room.config.witchBothSameNight ? '解药毒药可同晚使用' : '每晚只能使用一瓶药'} · {room.config.witchSelfSave ? '可以自救' : '不能自救'}
+          </div>
+        )}
+        <p className="mt-auto text-center text-xs text-muted-foreground">
+          <ArrowLeftRight className="mr-1 inline size-3" />
+          点击空位换座，点击其他玩家或法官头像可请求交换位置
+        </p>
+      </div>
 
       {outgoing && (
         <div className="panel mt-3 flex items-center justify-between px-3 py-2 text-sm">
@@ -146,8 +151,6 @@ export function Lobby({ state, status, send }: Props) {
           </Button>
         </div>
       )}
-
-      <div className="flex-1" />
 
       {me.isJudge ? (
         <div className="mt-4 flex gap-2">
