@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { RoleEmblem } from '@/components/art/RoleArt'
 import { Skull } from '@/components/art/icons'
-import { RoleCard, ROLE_TAGLINE, roleLabel } from '@/components/game/RoleCard'
+import { RoleCard, roleLabel } from '@/components/game/RoleCard'
 
 function FullScreen({ children, onClick, className }: { children: ReactNode; onClick?: () => void; className?: string }) {
   return (
@@ -27,7 +27,7 @@ export function IdentityReveal({ g, isJudge, onClose }: { g: GameView; isJudge: 
       <div className="text-sm tracking-[0.4em] text-gold-soft/80">{isJudge ? '本局你是' : '你的身份是'}</div>
       <RoleCard role={role} size="lg" flip />
       <div className="max-w-xs text-center text-sm text-gold-soft/80">
-        {isJudge ? '所有人的身份已显示在座位上，点击“天黑请闭眼”开始游戏' : ROLE_TAGLINE[role]}
+        {isJudge ? '所有人的身份已显示在座位上，点击“天黑请闭眼”开始游戏' : '请记住你的身份，不要让别人看到'}
       </div>
       {mates.length > 0 && (
         <div className="text-center text-sm text-red-300">你的狼同伴：{mates.map((p) => `${p.seat + 1}号 ${p.user.name}`).join('、')}</div>
@@ -43,7 +43,7 @@ const ANN_TITLE: Record<Announcement['kind'], string> = { night: '天亮了', vo
 
 /** 新公告：天亮死讯 / 投票结果 / 猎人开枪 */
 export function AnnouncementOverlay({ items, g, onClose }: { items: Announcement[]; g: GameView; onClose: () => void }) {
-  const a = items[items.length - 1]!
+  const a = items[0]!
   return (
     <FullScreen onClick={onClose}>
       <div className={cn('font-display text-5xl', a.kind === 'night' ? 'text-gold-grad' : a.kind === 'hunter' ? 'text-red-400' : 'text-gold-soft')}>

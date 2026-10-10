@@ -99,7 +99,8 @@ export function GameScreen({ state, status, send, onDone }: Props) {
     lastKey.current = action?.key ?? null
   }, [action?.key, action])
   const dialogKinds: ActionKind[] = ['wolf', 'seer', 'witch', 'vote', 'hunter']
-  const dialogOpen = !!action && dialogKinds.includes(action.kind) && closedKey !== action.key
+  // 先看完全屏公告（如天亮死讯），再弹出操作面板
+  const dialogOpen = !!action && dialogKinds.includes(action.kind) && closedKey !== action.key && annQueue.length === 0
 
   const [peek, setPeek] = useState(false)
   const [logOpen, setLogOpen] = useState(false)
@@ -160,7 +161,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
 
       {/* 玩家操作弹窗 */}
       <Dialog open={dialogOpen} onOpenChange={(o) => !o && setClosedKey(action?.key ?? null)}>
-        <DialogContent className="panel flex max-h-[92dvh] max-w-md flex-col gap-3 p-4" onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent className="panel flex max-h-[92dvh] max-w-md flex-col gap-3 p-4" onInteractOutside={(e) => e.preventDefault()} onOpenAutoFocus={(e) => e.preventDefault()}>
           <ActionDialogBody g={g} kind={action?.kind ?? null} send={send} />
         </DialogContent>
       </Dialog>

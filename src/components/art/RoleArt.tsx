@@ -19,7 +19,7 @@ export function RoleEmblem({ role, className }: { role: ArtRole; className?: str
   const id = useId().replace(/:/g, '')
   const t = ROLE_THEME[role]
   return (
-    <svg viewBox="0 0 120 150" className={className} aria-hidden>
+    <svg viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" className={className} aria-hidden>
       <defs>
         <linearGradient id={`bg${id}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={t.from} />
