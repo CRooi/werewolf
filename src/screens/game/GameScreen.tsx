@@ -132,10 +132,11 @@ export function GameScreen({ state, status, send, onDone }: Props) {
       <SeatTable
         count={g.players.length}
         renderSeat={(seat, side) => <Seat g={g} seat={seat} side={side} peek={peek} isJudge={isJudge} />}
-        center={<Stage state={state} />}
       />
 
-      <div className="flex-1" />
+      <div className="mt-3 flex flex-1 flex-col">
+        <Stage state={state} />
+      </div>
 
       {/* 底部操作区 */}
       <div className="sticky bottom-0 z-10 -mx-3 mt-3 px-3 safe-bottom">
