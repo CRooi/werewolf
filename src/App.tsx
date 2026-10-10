@@ -3,9 +3,12 @@ import { Toaster } from '@/components/ui/sonner'
 import { cleanUrl, loadName, loadSession, saveSession, SLOT, type Session } from '@/lib/session'
 import { Debug } from '@/screens/Debug'
 import { Home } from '@/screens/Home'
+import { Overview } from '@/screens/Overview'
 import { RoomScreen } from '@/screens/RoomScreen'
 
-const IS_DEBUG_PAGE = new URLSearchParams(location.search).has('debug')
+const params = new URLSearchParams(location.search)
+const IS_DEBUG_PAGE = params.has('debug')
+const IS_OVERVIEW = params.has('overview')
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession())
@@ -21,6 +24,8 @@ export default function App() {
   useEffect(() => {
     if (SLOT !== null && !IS_DEBUG_PAGE) document.title = `[${SLOT}] ${loadName() || '新玩家'} - 狼人杀`
   }, [session])
+
+  if (IS_OVERVIEW) return <Overview />
 
   if (IS_DEBUG_PAGE) {
     return (

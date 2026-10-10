@@ -10,7 +10,11 @@ import { GameError, Room, genCode } from './room'
 const rooms = new Map<string, Room>()
 for (const d of loadRooms()) rooms.set(d.code, new Room(d))
 
-/** code -> userId -> sockets */
+/** 大屏观战连接的 key 前缀，不对应任何玩家 */
+const SPECTATOR_PREFIX = 'spec:'
+const isSpectator = (key: string) => key.startsWith(SPECTATOR_PREFIX)
+
+/** code -> userId（或观战 key）-> sockets */
 const sockets = new Map<string, Map<string, Set<WebSocket>>>()
 
 const online = (code: string) => (userId: string) => (sockets.get(code)?.get(userId)?.size ?? 0) > 0
@@ -26,7 +30,13 @@ function sendUser(code: string, userId: string, msg: ServerMessage) {
 function broadcast(room: Room) {
   const conns = sockets.get(room.d.code)
   if (!conns) return
+  let spectatorMsg: ServerMessage | null = null
   for (const userId of conns.keys()) {
+    if (isSpectator(userId)) {
+      spectatorMsg ??= { type: 'state', state: room.spectatorView(online(room.d.code)) }
+      sendUser(room.d.code, userId, spectatorMsg)
+      continue
+    }
     if (!room.d.users[userId]) continue
     sendUser(room.d.code, userId, { type: 'state', state: room.view(userId, online(room.d.code)) })
   }
@@ -94,6 +104,25 @@ wss.on('connection', (ws, req) => {
   const code = url.searchParams.get('code') ?? ''
   const token = url.searchParams.get('token') ?? ''
   const room = rooms.get(code)
+
+  // 大屏观战：只读，收到的是所有人可见的公开状态
+  if (url.searchParams.has('spectate')) {
+    if (!room) {
+      send(ws, { type: 'kicked', reason: '房间不存在或已解散' })
+      return ws.close()
+    }
+    const key = SPECTATOR_PREFIX + crypto.randomUUID()
+    let byKey = sockets.get(code)
+    if (!byKey) sockets.set(code, (byKey = new Map()))
+    byKey.set(key, new Set([ws]))
+    send(ws, { type: 'state', state: room.spectatorView(online(code)) })
+    ws.on('message', (raw) => {
+      if (String(raw).includes('"ping"')) send(ws, { type: 'pong' })
+    })
+    ws.on('close', () => byKey!.delete(key))
+    return
+  }
+
   const user = room?.userByToken(token)
   if (!room || !user) {
     send(ws, { type: 'kicked', reason: room ? '你已不在该房间' : '房间不存在或已解散' })

@@ -175,3 +175,31 @@ test('judge can abort a game', () => {
   expect(s.room.d.game).toBeNull()
   expect(s.room.inGame).toBe(false)
 })
+
+test('spectator view only exposes public info', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  const { J, as, room } = s
+  J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
+  as(0, { type: 'wolfSelect', choice: 5 }); as(1, { type: 'wolfSelect', choice: 5 }); as(0, { type: 'wolfChat', text: 'secret' }); as(0, { type: 'wolfConfirm' })
+  let v = room.spectatorView(() => true)
+  expect(v.me.isJudge).toBe(false)
+  expect(v.me.seat).toBeNull()
+  const g = v.game!
+  expect(g.players.every((p) => p.role === undefined && !p.pendingDeath)).toBe(true)
+  expect(g.wolf).toBeNull()
+  expect(g.seer).toBeNull()
+  expect(g.witch).toBeNull()
+  expect(g.hunter).toBeNull()
+  expect(g.judgeLog).toBeNull()
+  expect(g.winner).toBeNull()
+  expect(g.peekRoles).toBeNull()
+  expect(JSON.stringify(v)).not.toContain('secret')
+  // 公布结果后可见全部身份
+  room.d.game!.phase = 'game_over'
+  room.d.game!.winner = 'good'
+  J('reveal')
+  v = room.spectatorView(() => true)
+  expect(v.game!.players.every((p) => p.role)).toBe(true)
+  expect(v.game!.winner).toBe('good')
+})

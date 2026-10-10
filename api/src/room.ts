@@ -105,6 +105,8 @@ export interface RoomData {
   game: GameState | null
 }
 
+const SPECTATOR_ID = '__spectator__'
+
 const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12)
 
 function freshNight(): NightState {
@@ -791,6 +793,11 @@ export class Room {
   }
 
   // ---------------- views ----------------
+
+  /** 大屏观战视角：以“非房间成员”的身份投影，只包含所有人可见的信息 */
+  spectatorView(online: (id: string) => boolean): StateView {
+    return this.view(SPECTATOR_ID, online)
+  }
 
   view(userId: string, online: (id: string) => boolean): StateView {
     const d = this.d
