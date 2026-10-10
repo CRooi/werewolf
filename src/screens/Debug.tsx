@@ -120,6 +120,12 @@ export function Debug() {
     refresh()
   }
 
+  /** 移除某个房间的全部调试槽位（仅清理本地记录） */
+  const clearRoom = (room: string) => {
+    for (const s of readSlots()) if (s.session.code === room) saveSession(null, s.slot)
+    refresh()
+  }
+
   const clearAll = () => {
     for (const s of readSlots()) saveSession(null, s.slot)
     refresh()
@@ -215,7 +221,12 @@ export function Debug() {
         ) : (
           rooms.map((room) => (
             <div key={room} className="space-y-1.5">
-              <div className="text-xs text-gold-soft/70">房间 {room}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gold-soft/70">房间 {room}</span>
+                <button type="button" className="flex items-center gap-1 text-xs text-red-300/80" onClick={() => clearRoom(room)}>
+                  <Trash2 className="size-3.5" /> 移除该房间
+                </button>
+              </div>
               {slots
                 .filter((s) => s.session.code === room)
                 .map((s) => (
