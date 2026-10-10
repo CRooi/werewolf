@@ -1,0 +1,262 @@
+import { useState } from 'react'
+import { ArrowLeftRight, Copy, LogOut, Play, Settings2, Trash2, UserX } from 'lucide-react'
+import { toast } from 'sonner'
+import { ROLE_NAME, ROLE_ORDER, seatCount, type ClientMessage, type RoomConfig, type StateView, type UserBrief } from '@shared/types'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Scenery } from '@/components/art/Scenery'
+import { ConfigForm } from '@/components/game/ConfigForm'
+import { ConnBadge } from '@/components/game/ConnBadge'
+import { PlayerToken } from '@/components/game/PlayerToken'
+import { RoleCard } from '@/components/game/RoleCard'
+import { SeatTable } from '@/components/game/SeatTable'
+import type { ConnStatus } from '@/hooks/useRoomSocket'
+
+interface Props {
+  state: StateView
+  status: ConnStatus
+  send: (m: ClientMessage) => void
+}
+
+export function Lobby({ state, status, send }: Props) {
+  const { me, room } = state
+  const [target, setTarget] = useState<{ user: UserBrief; seat: number | null } | null>(null)
+  const [editing, setEditing] = useState<RoomConfig | null>(null)
+  const [confirmExit, setConfirmExit] = useState(false)
+
+  const filled = room.seats.filter(Boolean).length
+  const total = room.seats.length
+  const full = filled === total
+  const incoming = room.swaps.find((s) => s.to.id === me.id)
+  const outgoing = room.swaps.find((s) => s.from.id === me.id)
+
+  const share = async () => {
+    const url = `${location.origin}/?room=${room.code}`
+    const text = `来玩狼人杀！房间码 ${room.code}\n${url}`
+    try {
+      if (navigator.share) await navigator.share({ title: '狼人杀', text, url })
+      else {
+        await navigator.clipboard.writeText(text)
+        toast.success('邀请链接已复制')
+      }
+    } catch {
+      /* 用户取消分享 */
+    }
+  }
+
+  const tapSeat = (seat: number) => {
+    const u = room.seats[seat]
+    if (!u) {
+      if (me.isJudge) return toast('法官需要与玩家交换位置才能入座')
+      return send({ type: 'sit', seat })
+    }
+    if (u.id === me.id) return
+    setTarget({ user: u, seat })
+  }
+
+  return (
+    <div className="mx-auto flex min-h-dvh max-w-lg flex-col px-3 safe-top safe-bottom">
+      <Scenery night dim />
+      {/* 顶栏 */}
+      <header className="flex items-center justify-between py-2">
+        <button onClick={() => setConfirmExit(true)} className="flex items-center gap-1 text-xs text-muted-foreground">
+          <LogOut className="size-4" /> {me.isJudge ? '解散' : '退出'}
+        </button>
+        <ConnBadge status={status} />
+      </header>
+
+      <button onClick={share} className="panel mx-auto mb-3 flex items-center gap-3 px-5 py-2 active:scale-95 transition">
+        <span className="text-xs text-muted-foreground">房间码</span>
+        <span className="font-display text-3xl tracking-[0.25em] text-gold-grad">{room.code}</span>
+        <Copy className="size-4 text-gold" />
+      </button>
+
+      <SeatTable
+        count={total}
+        renderSeat={(seat, side) => {
+          const u = room.seats[seat]
+          return (
+            <PlayerToken
+              seat={seat}
+              side={side}
+              empty={!u}
+              name={u?.name}
+              online={u?.online}
+              me={u?.id === me.id}
+              selected={!!u && (outgoing?.to.id === u.id || incoming?.from.id === u.id)}
+              onClick={() => tapSeat(seat)}
+            />
+          )
+        }}
+        center={
+          <div className="panel flex flex-1 flex-col items-center gap-2 p-2 text-center">
+            <div className="text-[11px] tracking-widest text-gold-soft/70">法官</div>
+            <button
+              className="flex flex-col items-center"
+              onClick={() => room.judge.id !== me.id && setTarget({ user: room.judge, seat: null })}
+            >
+              <RoleCard role="judge" size="sm" className="w-14" />
+              <div className="mt-1 max-w-24 truncate text-sm">
+                {room.judge.name}
+                {me.isJudge && <span className="text-[10px] text-gold">(我)</span>}
+              </div>
+              {!room.judge.online && <div className="text-[10px] text-muted-foreground">离线</div>}
+            </button>
+            <div className="divider-ornament w-full text-[10px]">✦</div>
+            <div className="flex flex-wrap justify-center gap-1">
+              {ROLE_ORDER.filter((r) => room.config[r] > 0).map((r) => (
+                <span key={r} className="rounded-full bg-black/40 px-2 py-0.5 text-[11px] text-gold-soft">
+                  {ROLE_NAME[r]}×{room.config[r]}
+                </span>
+              ))}
+            </div>
+            {room.config.witch > 0 && (
+              <div className="text-[10px] leading-relaxed text-muted-foreground">
+                {room.config.witchBothSameNight ? '双药可同晚' : '双药二选一'} · {room.config.witchSelfSave ? '可自救' : '不可自救'}
+              </div>
+            )}
+            <div className="mt-auto font-display text-2xl text-gold-soft">
+              {filled}/{total}
+            </div>
+            <div className="text-[10px] text-muted-foreground">{full ? '人已到齐' : '等待玩家入座'}</div>
+          </div>
+        }
+      />
+
+      <p className="mt-3 text-center text-xs text-muted-foreground">
+        <ArrowLeftRight className="mr-1 inline size-3" />
+        点击空位换座，点击其他玩家或法官可请求交换位置
+      </p>
+
+      {outgoing && (
+        <div className="panel mt-3 flex items-center justify-between px-3 py-2 text-sm">
+          <span>等待 {outgoing.to.name} 同意交换…</span>
+          <Button size="sm" variant="ghost" onClick={() => send({ type: 'swapCancel', id: outgoing.id })}>
+            取消
+          </Button>
+        </div>
+      )}
+
+      <div className="flex-1" />
+
+      {me.isJudge ? (
+        <div className="mt-4 flex gap-2">
+          <Button variant="stone" size="xl" className="px-4" onClick={() => setEditing(room.config)}>
+            <Settings2 />
+          </Button>
+          <Button variant="gold" size="xl" className="flex-1" disabled={!full} onClick={() => send({ type: 'start' })}>
+            <Play /> {full ? '开始游戏' : `还差 ${total - filled} 人`}
+          </Button>
+        </div>
+      ) : (
+        <div className="panel mt-4 py-3 text-center font-display text-gold-soft/80">等待法官开始游戏…</div>
+      )}
+
+      {/* 点击玩家 */}
+      <Dialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}>
+        <DialogContent className="panel max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl">
+              {target?.seat === null ? '法官' : `${(target?.seat ?? 0) + 1}号`} · {target?.user.name}
+            </DialogTitle>
+            <DialogDescription>
+              {target?.seat === null ? '交换后你将成为法官，法官回到你的座位成为玩家' : me.isJudge ? '交换后对方成为法官，你成为该座位的玩家' : '对方同意后即可交换'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              variant="gold"
+              size="lg2"
+              onClick={() => {
+                send({ type: 'swapRequest', to: target!.user.id })
+                setTarget(null)
+              }}
+            >
+              <ArrowLeftRight /> 请求交换位置
+            </Button>
+            {me.isJudge && target?.seat !== null && (
+              <Button
+                variant="destructive"
+                size="lg2"
+                onClick={() => {
+                  send({ type: 'kick', userId: target!.user.id })
+                  setTarget(null)
+                }}
+              >
+                <UserX /> 请出房间
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 收到交换请求 */}
+      <AlertDialog open={!!incoming}>
+        <AlertDialogContent className="panel max-w-xs">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-xl">交换位置请求</AlertDialogTitle>
+            <AlertDialogDescription>
+              {incoming &&
+                (incoming.from.id === room.judge.id
+                  ? `法官 ${incoming.from.name} 想和你交换位置，同意后你将成为法官`
+                  : me.isJudge
+                    ? `${incoming.from.name} 想成为法官，同意后你将坐到 Ta 的位置成为玩家`
+                    : `${incoming.from.name} 想和你交换位置`)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => send({ type: 'swapRespond', id: incoming!.id, accept: false })}>拒绝</AlertDialogCancel>
+            <AlertDialogAction onClick={() => send({ type: 'swapRespond', id: incoming!.id, accept: true })}>同意</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 修改配置 */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="panel flex max-h-[90dvh] max-w-sm flex-col">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl">修改板子</DialogTitle>
+            <DialogDescription>座位数将变为 {editing ? seatCount(editing) : 0}</DialogDescription>
+          </DialogHeader>
+          <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">{editing && <ConfigForm value={editing} onChange={setEditing} />}</div>
+          <Button
+            variant="gold"
+            size="lg2"
+            onClick={() => {
+              send({ type: 'updateConfig', config: editing! })
+              setEditing(null)
+            }}
+          >
+            保存
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* 退出 / 解散 */}
+      <AlertDialog open={confirmExit} onOpenChange={setConfirmExit}>
+        <AlertDialogContent className="panel max-w-xs">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-xl">{me.isJudge ? '解散房间？' : '退出房间？'}</AlertDialogTitle>
+            <AlertDialogDescription>{me.isJudge ? '所有玩家都会被请出房间' : '你的座位将被空出'}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-white" onClick={() => send({ type: me.isJudge ? 'disband' : 'leave' })}>
+              {me.isJudge ? <Trash2 /> : <LogOut />} {me.isJudge ? '解散' : '退出'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
