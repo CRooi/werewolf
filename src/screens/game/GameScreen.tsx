@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Eye, ScrollText, Square } from 'lucide-react'
+import { Eye, LogOut, ScrollText, Square } from 'lucide-react'
 import type { Announcement, ClientMessage, GameView, StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import { ConnBadge } from '@/components/game/ConnBadge'
 import { PlayerToken, SeatChip } from '@/components/game/PlayerToken'
 import { RoleCard } from '@/components/game/RoleCard'
 import { SeatTable } from '@/components/game/SeatTable'
+import { WatchBanner } from '@/components/game/WatchBanner'
 import type { ConnStatus } from '@/hooks/useRoomSocket'
 import { tabKey } from '@/lib/session'
 import { HunterPanel, SeerPanel, VoteBoard, WitchPanel, WolfPanel } from './ActionPanels'
@@ -108,12 +109,14 @@ export function GameScreen({ state, status, send, onDone }: Props) {
   const [voteView, setVoteView] = useState(false)
   const [confirmAbort, setConfirmAbort] = useState(false)
 
-  const showReveal = g.phase === 'dealt' && !revealSeen
+  const isSpectator = state.me.isSpectator
+  const showReveal = g.phase === 'dealt' && !revealSeen && !isSpectator
   const showResult = g.phase === 'revealed'
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-lg flex-col px-3 safe-top">
       <Scenery night={night} dim />
+      {g.watching && g.phase !== 'revealed' && <WatchBanner dead={!isSpectator} />}
       <header className="flex items-center justify-between py-2">
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-black/40 px-2.5 py-0.5 font-display text-sm text-gold-soft">房间 {state.room.code}</span>
@@ -145,6 +148,8 @@ export function GameScreen({ state, status, send, onDone }: Props) {
         <div className="panel p-3">
           {isJudge ? (
             <JudgeDock g={g} send={send} />
+          ) : isSpectator ? (
+            <SpectatorDock g={g} onOpenVote={() => setVoteView(true)} onExit={() => send({ type: 'leave' })} />
           ) : (
             <PlayerDock
               g={g}
@@ -449,6 +454,30 @@ function statusText(g: GameView) {
     default:
       return isNight(g.phase) ? '天黑请闭眼…' : ''
   }
+}
+
+/** 观战席底栏：只能看，不能操作 */
+function SpectatorDock({ g, onOpenVote, onExit }: { g: GameView; onOpenVote: () => void; onExit: () => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex size-14 shrink-0 items-center justify-center rounded-xl border border-gold/30 bg-black/40">
+        <Eye className="size-6 text-gold-soft" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="text-sm text-gold-soft/85">观战席 · 上帝视角，只能观看</div>
+        <div className="flex gap-2">
+          {g.phase === 'voting' && g.vote && (
+            <Button variant="stone" size="lg2" className="flex-1" onClick={onOpenVote}>
+              查看投票情况
+            </Button>
+          )}
+          <Button variant="ghost" size="lg2" className="text-muted-foreground" onClick={onExit}>
+            <LogOut /> 退出观战
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /** 出局玩家长按查看所有身份，松手隐藏 */

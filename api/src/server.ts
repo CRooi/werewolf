@@ -76,6 +76,15 @@ app.post('/api/rooms/:code/join', wrap((req, res) => {
   res.json({ code: room.d.code, token: user.token })
 }))
 
+app.post('/api/rooms/:code/spectate', wrap((req, res) => {
+  const room = rooms.get(String(req.params.code))
+  if (!room) return void res.status(404).json({ error: '房间不存在' })
+  const user = room.spectate(req.body?.name)
+  saveRoom(room.d)
+  broadcast(room)
+  res.json({ code: room.d.code, token: user.token })
+}))
+
 app.get('/api/rooms/:code', wrap((req, res) => {
   const room = rooms.get(String(req.params.code))
   if (!room) return void res.status(404).json({ error: '房间不存在' })

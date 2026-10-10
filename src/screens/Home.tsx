@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Bug, DoorOpen, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bug, DoorOpen, Eye, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { DEFAULT_CONFIG, type RoomConfig } from '@shared/types'
 import { Button } from '@/components/ui/button'
@@ -45,13 +45,13 @@ export function Home({ onEnter }: { onEnter: (s: Session) => void }) {
     }
   }
 
-  const join = async () => {
+  const join = async (as: 'join' | 'spectate' = 'join') => {
     const n = needName()
     if (!n) return
     if (!/^\d{4}$/.test(code)) return void toast.error('请输入 4 位房间码')
     setBusy(true)
     try {
-      onEnter(await api<Session>(`/api/rooms/${code}/join`, { name: n }))
+      onEnter(await api<Session>(`/api/rooms/${code}/${as}`, { name: n }))
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -133,8 +133,11 @@ export function Home({ onEnter }: { onEnter: (s: Session) => void }) {
                   onKeyDown={(e) => e.key === 'Enter' && join()}
                 />
               </div>
-              <Button variant="gold" size="xl" className="w-full" disabled={busy || code.length !== 4 || !name.trim()} onClick={join}>
+              <Button variant="gold" size="xl" className="w-full" disabled={busy || code.length !== 4 || !name.trim()} onClick={() => join()}>
                 入座
+              </Button>
+              <Button variant="stone" size="lg2" className="w-full" disabled={busy || code.length !== 4 || !name.trim()} onClick={() => join('spectate')}>
+                <Eye /> 观战（房间需允许观战）
               </Button>
             </div>
           )}

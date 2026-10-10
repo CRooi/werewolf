@@ -25,6 +25,8 @@ export interface RoomConfig {
   witchBothSameNight: boolean
   /** 女巫是否可以自救 */
   witchSelfSave: boolean
+  /** 是否允许观战（上帝视角，只读） */
+  allowSpectators: boolean
 }
 
 export const DEFAULT_CONFIG: RoomConfig = {
@@ -35,7 +37,11 @@ export const DEFAULT_CONFIG: RoomConfig = {
   villager: 2,
   witchBothSameNight: false,
   witchSelfSave: false,
+  allowSpectators: false,
 }
+
+/** 每个房间最多的观战人数 */
+export const MAX_SPECTATORS = 5
 
 export const MAX_SEATS = 18
 
@@ -185,7 +191,7 @@ export interface GameView {
   mySeat: number | null
   myRole: Role | null
   meAlive: boolean
-  /** 已出局的玩家：可观看狼人、预言家、女巫的操作 */
+  /** 上帝视角观看（已出局的玩家或观战席）：可观看狼人、预言家、女巫的操作 */
   watching: boolean
   /** 死亡玩家长按可查看的所有身份 */
   peekRoles: Role[] | null
@@ -211,12 +217,14 @@ export interface RoomView {
   judge: UserBrief
   seats: (UserBrief | null)[]
   swaps: SwapRequestView[]
+  /** 观战席 */
+  spectators: UserBrief[]
   /** 游戏进行中（未公布结果） */
   inGame: boolean
 }
 
 export interface StateView {
-  me: { id: string; name: string; isJudge: boolean; seat: number | null }
+  me: { id: string; name: string; isJudge: boolean; isSpectator: boolean; seat: number | null }
   room: RoomView
   game: GameView | null
 }

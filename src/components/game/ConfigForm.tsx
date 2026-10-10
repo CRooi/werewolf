@@ -1,4 +1,4 @@
-import { MAX_SEATS, ROLE_ORDER, seatCount, type RoomConfig } from '@shared/types'
+import { MAX_SEATS, MAX_SPECTATORS, ROLE_ORDER, seatCount, type RoomConfig } from '@shared/types'
 import { Switch } from '@/components/ui/switch'
 import { RoleCard, roleLabel, ROLE_TAGLINE } from './RoleCard'
 import { Stepper } from './Stepper'
@@ -48,6 +48,13 @@ export function ConfigForm({ value, onChange }: { value: RoomConfig; onChange: (
           </label>
         </div>
       )}
+      <label className="flex items-center justify-between gap-3 rounded-xl border border-gold/15 bg-black/25 p-3">
+        <div>
+          <div className="text-sm font-medium">允许观战</div>
+          <div className="text-xs text-muted-foreground">最多 {MAX_SPECTATORS} 人，上帝视角，只能看不能操作</div>
+        </div>
+        <Switch checked={value.allowSpectators} onCheckedChange={(v) => onChange({ ...value, allowSpectators: v })} />
+      </label>
     </div>
   )
 }

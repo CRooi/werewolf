@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Bug, ExternalLink, Plus, Trash2, Users, Zap } from 'lucide-react'
+import { Bug, ExternalLink, Eye, Plus, Trash2, Users, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { DEFAULT_CONFIG, seatCount, type RoomConfig } from '@shared/types'
 import { Button } from '@/components/ui/button'
@@ -109,6 +109,15 @@ export function Debug() {
       toast.success(`已加入 ${n} 名玩家`)
     })
 
+  const addSpectator = () =>
+    run(async () => {
+      if (!/^\d{4}$/.test(code)) throw new Error('请输入 4 位房间码')
+      const slot = freeSlots(1, 1)[0]!
+      const name = `观战${slot}`
+      saveSession(await api<Session>(`/api/rooms/${code}/spectate`, { name }), slot)
+      saveName(name, slot)
+    })
+
   const addOne = () =>
     run(async () => {
       if (!/^\d{4}$/.test(code)) throw new Error('请输入 4 位房间码')
@@ -186,6 +195,9 @@ export function Debug() {
             补满空位
           </Button>
         </div>
+        <Button variant="stone" size="lg2" className="w-full" disabled={busy} onClick={addSpectator}>
+          <Eye /> 加入 1 名观战者（房间需允许观战）
+        </Button>
         <Button
           variant="stone"
           size="lg2"

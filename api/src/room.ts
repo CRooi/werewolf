@@ -1,6 +1,7 @@
 import {
   GOD_ROLES,
   JUDGE_CHAT_SEAT,
+  MAX_SPECTATORS,
   MAX_SEATS,
   ROLE_NAME,
   ROLE_ORDER,
@@ -102,6 +103,8 @@ export interface RoomData {
   judgeId: string
   users: Record<string, User>
   seats: (string | null)[]
+  /** 观战席的用户 id */
+  spectators: string[]
   swaps: SwapRequest[]
   game: GameState | null
 }
@@ -140,6 +143,7 @@ export function validateConfig(c: RoomConfig): RoomConfig {
     villager: Math.floor(Number(c.villager) || 0),
     witchBothSameNight: !!c.witchBothSameNight,
     witchSelfSave: !!c.witchSelfSave,
+    allowSpectators: !!c.allowSpectators,
   }
   for (const r of ROLE_ORDER) if (clean[r] < 0) fail('角色数量不能为负数')
   if (clean.seer > 1 || clean.witch > 1 || clean.hunter > 1) fail('预言家、女巫、猎人最多各 1 名')
@@ -165,7 +169,11 @@ export function cleanName(name: unknown): string {
 }
 
 export class Room {
-  constructor(public d: RoomData) {}
+  constructor(public d: RoomData) {
+    // 兼容旧数据
+    d.spectators ??= []
+    d.config.allowSpectators ??= false
+  }
 
   static create(code: string, config: RoomConfig, judgeName: string): { room: Room; user: User } {
     const cfg = validateConfig(config)
@@ -177,6 +185,7 @@ export class Room {
       judgeId: user.id,
       users: { [user.id]: user },
       seats: Array(seatCount(cfg)).fill(null),
+      spectators: [],
       swaps: [],
       game: null,
     })
@@ -206,9 +215,24 @@ export class Room {
     return user
   }
 
+  /** 以观战身份加入：上帝视角，只能看不能操作；开局前和游戏中均可加入 */
+  spectate(name: string): User {
+    if (!this.d.config.allowSpectators) fail('本房间不允许观战')
+    if (this.d.spectators.length >= MAX_SPECTATORS) fail(`观战席已满（最多 ${MAX_SPECTATORS} 人）`)
+    const user: User = { id: uid(), token: crypto.randomUUID(), name: cleanName(name) }
+    this.d.users[user.id] = user
+    this.d.spectators.push(user.id)
+    return user
+  }
+
+  isSpectator(userId: string) {
+    return this.d.spectators.includes(userId)
+  }
+
   private removeUser(userId: string) {
     const s = this.seatOf(userId)
     if (s !== null) this.d.seats[s] = null
+    this.d.spectators = this.d.spectators.filter((x) => x !== userId)
     delete this.d.users[userId]
     this.d.swaps = this.d.swaps.filter((x) => x.from !== userId && x.to !== userId)
   }
@@ -221,6 +245,14 @@ export class Room {
     }
     const needLobby = () => {
       if (this.inGame) fail('游戏进行中')
+    }
+
+    // 观战者只能看，唯一允许的操作是退出观战
+    if (this.isSpectator(userId)) {
+      if (msg.type === 'ping') return {}
+      if (msg.type !== 'leave') fail('观战中只能观看，不能操作')
+      this.removeUser(userId)
+      return { kicked: userId }
     }
 
     switch (msg.type) {
@@ -240,7 +272,7 @@ export class Room {
       case 'swapRequest': {
         needLobby()
         const to = this.d.users[msg.to]
-        if (!to || to.id === userId) fail('玩家不存在')
+        if (!to || to.id === userId || this.isSpectator(msg.to)) fail('玩家不存在')
         if (this.d.swaps.some((s) => s.from === userId && s.to === msg.to)) return {}
         this.d.swaps = this.d.swaps.filter((s) => s.from !== userId)
         this.d.swaps.push({ id: uid(), from: userId, to: msg.to })
@@ -262,7 +294,8 @@ export class Room {
       }
       case 'kick': {
         needJudge()
-        needLobby()
+        // 观战者随时可以请出；玩家只能在开局前请出
+        if (!this.isSpectator(msg.userId)) needLobby()
         if (msg.userId === userId || !this.d.users[msg.userId]) fail('玩家不存在')
         this.removeUser(msg.userId)
         return { kicked: msg.userId }
@@ -805,22 +838,24 @@ export class Room {
     const d = this.d
     const brief = (id: string) => ({ id, name: d.users[id]?.name ?? '?', online: online(id) })
     const isJudge = userId === d.judgeId
+    const isSpectator = this.isSpectator(userId)
     const roomSeat = this.seatOf(userId)
     return {
-      me: { id: userId, name: d.users[userId]?.name ?? '?', isJudge, seat: roomSeat },
+      me: { id: userId, name: d.users[userId]?.name ?? '?', isJudge, isSpectator, seat: roomSeat },
       room: {
         code: d.code,
         config: d.config,
         judge: brief(d.judgeId),
         seats: d.seats.map((s) => (s ? brief(s) : null)),
         swaps: d.swaps.filter((s) => s.from === userId || s.to === userId).map((s) => ({ id: s.id, from: brief(s.from), to: brief(s.to) })),
+        spectators: d.spectators.map(brief),
         inGame: this.inGame,
       },
-      game: d.game ? this.gameView(userId, isJudge, brief) : null,
+      game: d.game ? this.gameView(userId, isJudge, isSpectator, brief) : null,
     }
   }
 
-  private gameView(userId: string, isJudge: boolean, brief: (id: string) => PlayerView['user']): GameView {
+  private gameView(userId: string, isJudge: boolean, isSpectator: boolean, brief: (id: string) => PlayerView['user']): GameView {
     const g = this.d.game!
     const c = this.d.config
     const n = g.night
@@ -832,13 +867,14 @@ export class Room {
     const isWolf = myRole === 'werewolf'
     const night = this.isNightPhaseOf(g.phase)
     // 已公布出局的玩家进入观战：可以看到狼人、预言家、女巫的操作（当晚刚被刀、尚未天亮的不算）
-    const watching = mySeat !== null && !meAlive
+    // 观战席同样是上帝视角，并且能看到全部身份
+    const watching = (mySeat !== null && !meAlive) || isSpectator
     const godView = isJudge || watching
     const pending = godView && night ? this.pendingDeathsFor(g) : []
 
     const players: PlayerView[] = g.seats.map((uid, i) => {
       let role: Role | undefined
-      if (isJudge || revealed || i === mySeat || (isWolf && g.roles[i] === 'werewolf')) role = g.roles[i]
+      if (isJudge || isSpectator || revealed || i === mySeat || (isWolf && g.roles[i] === 'werewolf')) role = g.roles[i]
       const p: PlayerView = { seat: i, user: brief(uid), alive: g.alive[i]! }
       if (role) p.role = role
       if (pending.includes(i)) p.pendingDeath = true
@@ -904,14 +940,14 @@ export class Room {
             }
           : null,
       vote: g.vote,
-      hunter: g.hunter && (isJudge || g.hunter.seat === mySeat) ? g.hunter : null,
+      hunter: g.hunter && (isJudge || isSpectator || g.hunter.seat === mySeat) ? g.hunter : null,
       hasSeer: c.seer > 0,
       hasWitch: c.witch > 0,
       seerDone: n.seerDone,
       witchDone: n.witchDone,
       announcements: g.announcements,
-      judgeLog: isJudge ? g.judgeLog : revealed ? g.judgeLog : null,
-      winner: isJudge || revealed ? g.winner : null,
+      judgeLog: isJudge || isSpectator || revealed ? g.judgeLog : null,
+      winner: isJudge || isSpectator || revealed ? g.winner : null,
       lastNightDeaths: g.lastNightDeaths,
     }
   }

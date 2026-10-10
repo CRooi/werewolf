@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ArrowLeftRight, Copy, LogOut, Play, Settings2, Trash2, UserX } from 'lucide-react'
+import { ArrowLeftRight, Copy, Eye, LogOut, Play, Settings2, Trash2, UserX, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { ROLE_NAME, ROLE_ORDER, seatCount, type ClientMessage, type RoomConfig, type StateView, type UserBrief } from '@shared/types'
+import { MAX_SPECTATORS, ROLE_NAME, ROLE_ORDER, seatCount, type ClientMessage, type RoomConfig, type StateView, type UserBrief } from '@shared/types'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -20,6 +21,7 @@ import { ConnBadge } from '@/components/game/ConnBadge'
 import { PlayerToken } from '@/components/game/PlayerToken'
 import { RoleCard } from '@/components/game/RoleCard'
 import { SeatTable } from '@/components/game/SeatTable'
+import { WatchBanner } from '@/components/game/WatchBanner'
 import type { ConnStatus } from '@/hooks/useRoomSocket'
 
 interface Props {
@@ -55,6 +57,7 @@ export function Lobby({ state, status, send }: Props) {
   }
 
   const tapSeat = (seat: number) => {
+    if (me.isSpectator) return
     const u = room.seats[seat]
     if (!u) {
       if (me.isJudge) return toast('法官需要与玩家交换位置才能入座')
@@ -67,10 +70,11 @@ export function Lobby({ state, status, send }: Props) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-lg flex-col px-3 safe-top safe-bottom">
       <Scenery night dim />
+      {me.isSpectator && <WatchBanner />}
       {/* 顶栏 */}
       <header className="flex items-center justify-between py-2">
         <button onClick={() => setConfirmExit(true)} className="flex items-center gap-1 text-xs text-muted-foreground">
-          <LogOut className="size-4" /> {me.isJudge ? '解散' : '退出'}
+          <LogOut className="size-4" /> {me.isJudge ? '解散' : me.isSpectator ? '退出观战' : '退出'}
         </button>
         <ConnBadge status={status} />
       </header>
@@ -94,7 +98,7 @@ export function Lobby({ state, status, send }: Props) {
               online={u?.online}
               me={u?.id === me.id}
               selected={!!u && (outgoing?.to.id === u.id || incoming?.from.id === u.id)}
-              onClick={() => tapSeat(seat)}
+              onClick={me.isSpectator ? undefined : () => tapSeat(seat)}
             />
           )
         }}
@@ -105,7 +109,7 @@ export function Lobby({ state, status, send }: Props) {
         <div className="flex items-center gap-3">
           <button
             className="flex shrink-0 items-center gap-3 text-left active:scale-95 transition"
-            onClick={() => room.judge.id !== me.id && setTarget({ user: room.judge, seat: null })}
+            onClick={() => room.judge.id !== me.id && !me.isSpectator && setTarget({ user: room.judge, seat: null })}
           >
             <RoleCard role="judge" size="sm" className="w-14" />
             <div>
@@ -137,10 +141,37 @@ export function Lobby({ state, status, send }: Props) {
             女巫：{room.config.witchBothSameNight ? '解药毒药可同晚使用' : '每晚只能使用一瓶药'} · {room.config.witchSelfSave ? '可以自救' : '不能自救'}
           </div>
         )}
-        <p className="mt-auto text-center text-xs text-muted-foreground">
-          <ArrowLeftRight className="mr-1 inline size-3" />
-          点击空位换座，点击其他玩家或法官头像可请求交换位置
-        </p>
+        {room.config.allowSpectators && (
+          <div className="rounded-xl bg-black/25 px-3 py-2">
+            <div className="mb-1.5 text-xs text-gold-soft/70">
+              观战席 {room.spectators.length}/{MAX_SPECTATORS}
+            </div>
+            {room.spectators.length === 0 ? (
+              <div className="text-xs text-muted-foreground">暂无观战者，输入房间码后选择「观战」即可加入</div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {room.spectators.map((u) => (
+                  <span key={u.id} className={cn('flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-2.5 py-0.5 text-xs', !u.online && 'opacity-50')}>
+                    <Eye className="size-3 text-gold-soft/70" />
+                    {u.name}
+                    {u.id === me.id && <span className="text-gold">(我)</span>}
+                    {me.isJudge && (
+                      <button className="ml-0.5 text-red-300" onClick={() => send({ type: 'kick', userId: u.id })} aria-label={`请出观战者 ${u.name}`}>
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {!me.isSpectator && (
+          <p className="mt-auto text-center text-xs text-muted-foreground">
+            <ArrowLeftRight className="mr-1 inline size-3" />
+            点击空位换座，点击其他玩家或法官头像可请求交换位置
+          </p>
+        )}
       </div>
 
       {outgoing && (
@@ -162,7 +193,7 @@ export function Lobby({ state, status, send }: Props) {
           </Button>
         </div>
       ) : (
-        <div className="panel mt-4 py-3 text-center font-display text-gold-soft/80">等待法官开始游戏…</div>
+        <div className="panel mt-4 py-3 text-center font-display text-gold-soft/80">{me.isSpectator ? '你在观战席，等待法官开始游戏…' : '等待法官开始游戏…'}</div>
       )}
 
       {/* 点击玩家 */}
@@ -249,8 +280,8 @@ export function Lobby({ state, status, send }: Props) {
       <AlertDialog open={confirmExit} onOpenChange={setConfirmExit}>
         <AlertDialogContent className="panel max-w-xs">
           <AlertDialogHeader>
-            <AlertDialogTitle className="font-display text-xl">{me.isJudge ? '解散房间？' : '退出房间？'}</AlertDialogTitle>
-            <AlertDialogDescription>{me.isJudge ? '所有玩家都会被请出房间' : '你的座位将被空出'}</AlertDialogDescription>
+            <AlertDialogTitle className="font-display text-xl">{me.isJudge ? '解散房间？' : me.isSpectator ? '退出观战？' : '退出房间？'}</AlertDialogTitle>
+            <AlertDialogDescription>{me.isJudge ? '所有玩家都会被请出房间' : me.isSpectator ? '你将离开观战席' : '你的座位将被空出'}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>

@@ -82,7 +82,7 @@ export function Stage({ state }: { state: StateView }) {
         {night && g.watching && g.wolf && ['wolf_wake', 'wolf_pick'].includes(g.phase) && <WolfChat g={g} readOnly />}
         {dark && !isJudge && !(night && g.watching) && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-sm text-gold-soft/70">
-            {g.phase === 'dealt' ? '身份已发放，记住你的身份，等待法官宣布天黑' : !g.meAlive ? '你已出局，请保持安静' : myTurn ? '轮到你了，请点击下方「睁眼」' : eyesOpenForMe ? '请按提示完成操作' : '夜幕笼罩村庄，请安静等待…'}
+            {g.phase === 'dealt' ? (state.me.isSpectator ? '身份已发放，所有身份已显示在座位上' : '身份已发放，记住你的身份，等待法官宣布天黑') : !g.meAlive ? '你已出局，请保持安静' : myTurn ? '轮到你了，请点击下方「睁眼」' : eyesOpenForMe ? '请按提示完成操作' : '夜幕笼罩村庄，请安静等待…'}
           </div>
         )}
         {dark && isJudge && !night && <div className="flex flex-1 items-center justify-center text-sm text-gold-soft/70">所有身份已显示在座位上，准备好后宣布天黑</div>}

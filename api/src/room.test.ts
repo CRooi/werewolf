@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import type { ClientMessage, Role, RoomConfig } from '../../shared/types'
 import { Room } from './room'
 
-const cfg: RoomConfig = { werewolf: 2, seer: 1, witch: 1, hunter: 1, villager: 2, witchBothSameNight: false, witchSelfSave: false }
+const cfg: RoomConfig = { werewolf: 2, seer: 1, witch: 1, hunter: 1, villager: 2, witchBothSameNight: false, witchSelfSave: false, allowSpectators: false }
 
 function setup(config = cfg) {
   const { room, user: judge } = Room.create('1234', config, '法官')
@@ -244,4 +244,33 @@ test('dead players can watch wolf / seer / witch actions; alive players cannot',
   J('witchWake'); as(3, { type: 'openEyes' }); J('witchInform')
   expect(room.view(g.seats[5]!, () => true).game!.witch!.victim).toBe(6)
   expect(room.view(g.seats[5]!, () => true).game!.players[6]!.pendingDeath).toBe(true)
+})
+
+test('spectators: opt-in, max 5, god view, read-only', () => {
+  const s = setup()
+  expect(() => s.room.spectate('看客')).toThrow('不允许观战')
+  s.room.d.config.allowSpectators = true
+  const specs = [1, 2, 3, 4, 5].map((i) => s.room.spectate(`看客${i}`))
+  expect(() => s.room.spectate('看客6')).toThrow('观战席已满')
+  s.fixRoles(ROLES)
+  const { J, as, room } = s
+  const spec = specs[0]!
+  // 游戏中也能观战（先移除一位腾出位置）
+  room.handle(specs[4]!.id, { type: 'leave' })
+  expect(room.d.spectators.length).toBe(4)
+  room.spectate('迟到的看客')
+  J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
+  as(0, { type: 'wolfSelect', choice: 5 }); as(0, { type: 'wolfChat', text: '刀5' })
+  const v = room.view(spec.id, () => true)
+  expect(v.me.isSpectator).toBe(true)
+  expect(v.game!.watching).toBe(true)
+  expect(v.game!.players.every((p) => p.role)).toBe(true)
+  expect(v.game!.wolf!.chat[0]!.text).toBe('刀5')
+  expect(v.game!.judgeLog).not.toBeNull()
+  // 只读：任何操作都被拒绝
+  for (const msg of [{ type: 'wolfChat', text: 'x' }, { type: 'judge', step: 'wolfClose' }, { type: 'voteSelect', choice: 1 }, { type: 'sit', seat: 0 }] as const)
+    expect(() => room.handle(spec.id, msg as never)).toThrow('观战中只能观看')
+  // 法官可随时请出观战者
+  room.handle(s.judge.id, { type: 'kick', userId: spec.id })
+  expect(room.isSpectator(spec.id)).toBe(false)
 })
