@@ -117,7 +117,7 @@ export function GameScreen({ state, status, send, onDone }: Props) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-lg flex-col px-3 safe-top">
       <Scenery night={night} dim />
-      {g.watching && g.phase !== 'revealed' && <WatchBanner dead={!isSpectator} />}
+      {(g.watching || g.watchLocked) && g.phase !== 'revealed' && <WatchBanner dead={!isSpectator} locked={g.watchLocked} />}
       <header className="flex items-center justify-between py-2">
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-black/40 px-2.5 py-0.5 font-display text-sm text-gold-soft">房间 {state.room.code}</span>
@@ -453,6 +453,7 @@ function PlayerDock({
 }
 
 function statusText(g: GameView) {
+  if (g.watchLocked) return '你已出局，第二晚起可进入观战'
   if (!g.meAlive && g.phase !== 'game_over') return isNight(g.phase) ? '你已出局，正在观战，请勿透露信息' : '你已出局，请保持安静'
   switch (g.phase) {
     case 'dealt':

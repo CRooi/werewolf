@@ -281,8 +281,13 @@ test('ghost channel: dead players, spectators and judge only', () => {
   const spec = s.room.spectate('看客')
   s.fixRoles(ROLES)
   night(s, 5, { check: 0 })
-  const { as, room, judge } = s
+  const { as, room, judge, J } = s
   const g = room.d.game!
+  // 第一天出局，第二夜才能进入观战频道
+  expect(() => as(5, { type: 'ghostChat', text: '太早了' })).toThrow('第二晚')
+  J('voteStart')
+  vote(s, { 0: 'abstain', 1: 'abstain', 2: 'abstain', 3: 'abstain', 4: 'abstain', 6: 'abstain' })
+  J('nightStart')
   as(5, { type: 'ghostChat', text: '我是平民，冤' })
   room.handle(spec.id, { type: 'ghostChat', text: '节哀' })
   room.handle(judge.id, { type: 'ghostChat', text: '请保持安静' })
@@ -356,6 +361,9 @@ test('after reveal, everyone can read all channels', () => {
   s.fixRoles(ROLES)
   night(s, 5, { check: 0 })
   const { as, room, J } = s
+  J('voteStart')
+  vote(s, { 0: 'abstain', 1: 'abstain', 2: 'abstain', 3: 'abstain', 4: 'abstain', 6: 'abstain' })
+  J('nightStart')
   as(5, { type: 'ghostChat', text: '我死得冤' })
   const alive = () => room.view(room.d.game!.seats[6]!, () => true).game!
   expect(alive().wolf).toBeNull()
@@ -390,4 +398,41 @@ test('dead seer / witch: judge walks the full flow as if they were alive', () =>
   expect(g.seerHistory).toEqual([])
   J('dawn')
   expect(g.lastNightDeaths).toEqual([5])
+})
+
+test('players dead on day 1 cannot watch until night 2; later deaths watch immediately', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  const { J, as, room } = s
+  const g = room.d.game!
+  night(s, 5, { check: 0 }) // 第一夜刀 6号（seat 5）
+  const v = () => room.view(g.seats[5]!, () => true).game!
+  expect(v().watchLocked).toBe(true)
+  expect(v().watching).toBe(false)
+  expect(v().wolf).toBeNull()
+  expect(v().ghostChat).toBeNull()
+  expect(v().peekRoles).toBeNull()
+  expect(v().players.filter((p) => p.role).length).toBe(1) // 只看得到自己
+  // 第一天被投出的玩家同样受限
+  J('voteStart')
+  vote(s, { 0: 3, 1: 3, 2: 3, 3: 'abstain', 4: 3, 6: 3 })
+  expect(g.alive[3]).toBe(false)
+  expect(room.view(g.seats[3]!, () => true).game!.watchLocked).toBe(true)
+  // 第二夜开始解锁
+  J('nightStart')
+  expect(v().watchLocked).toBe(false)
+  expect(v().watching).toBe(true)
+  expect(v().wolf).not.toBeNull()
+  expect(v().peekRoles).not.toBeNull()
+  // 第二天出局的玩家公布后立即可观战
+  J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
+  as(0, { type: 'wolfSelect', choice: 4 }); as(1, { type: 'wolfSelect', choice: 4 }); as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  for (const step of ['seerWake'] as const) J(step)
+  as(2, { type: 'openEyes' }); J('seerPick'); as(2, { type: 'seerSelect', seat: 1 }); as(2, { type: 'seerConfirm' }); J('seerReveal'); J('seerClose')
+  J('witchWake'); J('witchInform'); J('witchClose') // 女巫已出局，空过
+  J('dawn')
+  const d2 = room.view(g.seats[4]!, () => true).game!
+  expect(g.alive[4]).toBe(false)
+  expect(d2.watchLocked).toBe(false)
+  expect(d2.watching).toBe(true)
 })

@@ -82,6 +82,8 @@ export interface GameState {
   seats: string[]
   roles: Role[]
   alive: boolean[]
+  /** 每名玩家公布出局的日期（第几天），存活为 null */
+  deathDay: (number | null)[]
   antidote: boolean
   poison: boolean
   night: NightState
@@ -186,6 +188,7 @@ export class Room {
       d.game.wolfChat ??= []
       d.game.idiot ??= null
       d.game.idiotRevealed ??= null
+      d.game.deathDay ??= d.game.roles.map(() => null)
     }
   }
 
@@ -268,6 +271,7 @@ export class Room {
       const seat = g!.seats.indexOf(userId)
       const spectator = this.isSpectator(userId)
       if (!isJudge && !spectator && !(seat >= 0 && !g!.alive[seat])) fail('只有出局玩家、观战者和法官可以在观战频道发言')
+      if (seat >= 0 && this.watchLocked(seat)) fail('第一天出局的玩家需等到第二晚才能进入观战')
       const text = String(msg.text ?? '').trim().slice(0, 200)
       if (!text) return {}
       g!.ghostChat.push({
@@ -415,6 +419,7 @@ export class Room {
       seats: this.d.seats.slice() as string[],
       roles,
       alive: roles.map(() => true),
+      deathDay: roles.map(() => null),
       antidote: c.witch > 0,
       poison: c.witch > 0,
       night: freshNight(),
@@ -456,6 +461,19 @@ export class Room {
 
   private log(text: string) {
     this.g().judgeLog.push(`第${this.g().day}${this.isNightPhase() ? '晚' : '天'}：${text}`)
+  }
+
+  /** 公布出局：记录出局日期 */
+  private kill(seat: number) {
+    const g = this.g()
+    g.alive[seat] = false
+    g.deathDay[seat] = g.day
+  }
+
+  /** 第一天出局的玩家在第一天内暂不能观战（防止遗言等环节透露信息），第二夜起解锁 */
+  private watchLocked(seat: number) {
+    const g = this.d.game!
+    return !g.alive[seat] && g.deathDay[seat] === 1 && g.day === 1 && g.phase !== 'revealed'
   }
 
   /** 聊天消息的阶段标签 */
@@ -630,7 +648,7 @@ export class Room {
           this.log('猎人选择不带人')
           this.announce('hunter', '猎人选择不带人', [])
         } else {
-          g.alive[msg.target] = false
+          this.kill(msg.target)
           this.log(`猎人带走了 ${this.label(msg.target)}`)
           this.announce('hunter', `${this.label(h.seat)} 是猎人，开枪带走了 ${this.label(msg.target)}`, [msg.target])
         }
@@ -778,7 +796,7 @@ export class Room {
     const g = this.g()
     const n = g.night
     const deaths = this.nightDeaths()
-    for (const s of deaths) g.alive[s] = false
+    for (const s of deaths) this.kill(s)
     g.lastNightDeaths = deaths
     g.phase = 'day'
     this.announce(
@@ -878,7 +896,7 @@ export class Room {
     const r = g.vote!.result!
     r.eliminated = seat
     r.resolved = true
-    g.alive[seat] = false
+    this.kill(seat)
     this.announce('vote', `投票结果：${this.label(seat)} 被放逐出局`, [seat])
     this.log(`${this.label(seat)} 被投票出局`)
     if (this.checkWin()) return
@@ -946,7 +964,8 @@ export class Room {
     const night = this.isNightPhaseOf(g.phase)
     // 已公布出局的玩家进入观战：可以看到狼人、预言家、女巫的操作（当晚刚被刀、尚未天亮的不算）
     // 观战席同样是上帝视角，并且能看到全部身份
-    const watching = (mySeat !== null && !meAlive) || isSpectator
+    const watchLocked = mySeat !== null && this.watchLocked(mySeat)
+    const watching = (mySeat !== null && !meAlive && !watchLocked) || isSpectator
     const godView = isJudge || watching
     const pending = godView && night ? this.pendingDeathsFor(g) : []
 
@@ -977,7 +996,8 @@ export class Room {
       myRole,
       meAlive,
       watching,
-      peekRoles: mySeat !== null && !meAlive ? g.roles.slice() : null,
+      watchLocked,
+      peekRoles: mySeat !== null && !meAlive && !watchLocked ? g.roles.slice() : null,
       wolf: showWolf
         ? {
             seats: wolfSeats,

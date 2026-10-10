@@ -205,6 +205,8 @@ export interface GameView {
   meAlive: boolean
   /** 上帝视角观看（已出局的玩家或观战席）：可观看狼人、预言家、女巫的操作 */
   watching: boolean
+  /** 第一天出局的玩家在第一天内暂不能观战，第二夜开始才进入上帝视角 */
+  watchLocked: boolean
   /** 死亡玩家长按可查看的所有身份 */
   peekRoles: Role[] | null
   wolf: WolfView | null
