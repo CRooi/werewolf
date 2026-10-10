@@ -6,6 +6,7 @@
       "name": "werewolf",
       "dependencies": {
         "@fontsource-variable/geist": "^5.3.0",
+        "@fontsource/zcool-xiaowei": "^5.3.0",
         "@tailwindcss/vite": "^4.3.3",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -100,6 +101,8 @@
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "https://mirrors.tencent.com/npm/@floating-ui/utils/-/utils-0.2.12.tgz", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
     "@fontsource-variable/geist": ["@fontsource-variable/geist@5.3.0", "https://mirrors.tencent.com/npm/@fontsource-variable/geist/-/geist-5.3.0.tgz", {}, "sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA=="],
+
+    "@fontsource/zcool-xiaowei": ["@fontsource/zcool-xiaowei@5.3.0", "https://mirrors.tencent.com/npm/@fontsource/zcool-xiaowei/-/zcool-xiaowei-5.3.0.tgz", {}, "sha512-iRuUPl9ONFbYzi6JcEshpE4VedINyzQ4hv0Z5XEt0cB0pMPiQeqc2Qvv1NwJCNzkPwG02VCdcO+cF2K8ylYn2A=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.4", "https://mirrors.tencent.com/npm/@hono/node-server/-/node-server-2.1.4.tgz", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-2g1qeHl4BduwDn6L8nkAvDrPUWPMlkQ//a5NhP/zIyaXKMjZNRV+cG9Csu+BiJFf6+68pqzjf4Hi5sJGKHuS1g=="],
 
