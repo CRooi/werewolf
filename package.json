@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:api": "bun --cwd api run dev",
+    "dev:api": "bun run --cwd api dev",
     "build": "tsc -b && vite build",
-    "start": "bun --cwd api run start",
+    "start": "bun run --cwd api start",
     "lint": "oxlint",
-    "test": "bun --cwd api test",
+    "test": "bun run --cwd api test",
     "preview": "vite preview"
   },
   "dependencies": {
