@@ -80,6 +80,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [view, setView] = useState<View>({ kind: 'list' })
   const [tab, setTab] = useState<'rooms' | 'games'>('rooms')
   const [rooms, setRooms] = useState<AdminRoom[]>([])
+  const [fetchedAt, setFetchedAt] = useState(0)
   const [games, setGames] = useState<AdminGame[]>([])
 
   const guard = useCallback(
@@ -93,7 +94,10 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   )
 
   const refresh = useCallback(() => {
-    adminApi<AdminRoom[]>('/api/admin/rooms').then(setRooms, guard)
+    adminApi<AdminRoom[]>('/api/admin/rooms').then((r) => {
+      setRooms(r)
+      setFetchedAt(Date.now())
+    }, guard)
     adminApi<AdminGame[]>('/api/admin/games').then(setGames, guard)
   }, [guard])
 
@@ -153,7 +157,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {tab === 'rooms' ? (
-                <RoomList rooms={rooms} onOpen={(code) => setView({ kind: 'live', code })} />
+                <RoomList rooms={rooms} fetchedAt={fetchedAt} onOpen={(code) => setView({ kind: 'live', code })} />
               ) : (
                 <GameList games={games} onOpen={(id) => setView({ kind: 'replay', id })} />
               )}
@@ -165,7 +169,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   )
 }
 
-function RoomList({ rooms, onOpen }: { rooms: AdminRoom[]; onOpen: (code: string) => void }) {
+function RoomList({ rooms, fetchedAt, onOpen }: { rooms: AdminRoom[]; fetchedAt: number; onOpen: (code: string) => void }) {
   if (!rooms.length) return <div className="py-16 text-center text-muted-foreground">暂无房间</div>
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
@@ -181,11 +185,24 @@ function RoomList({ rooms, onOpen }: { rooms: AdminRoom[]; onOpen: (code: string
             法官 {r.judge} · 入座 {r.seated}/{r.seats}
             {r.spectators > 0 && ` · 观战 ${r.spectators}`}
           </div>
+          <IdleInfo room={r} now={fetchedAt} />
           <Button variant={r.inGame ? 'gold' : 'stone'} size="sm" className="mt-1" onClick={() => onOpen(r.code)}>
             <Eye /> 上帝视角
           </Button>
         </div>
       ))}
+    </div>
+  )
+}
+
+/** 最后操作时间与自动解散倒计时（列表每 5 秒刷新一次） */
+function IdleInfo({ room, now }: { room: AdminRoom; now: number }) {
+  const idle = Math.max(0, now - room.lastActiveAt)
+  const left = Math.max(0, room.idleTimeoutMs - idle)
+  const mins = (ms: number) => (ms < 60_000 ? '不到 1 分钟' : `${Math.floor(ms / 60_000)} 分钟`)
+  return (
+    <div className={cn('text-xs', left < 5 * 60_000 ? 'text-amber-300' : 'text-muted-foreground')}>
+      最后操作 {idle < 60_000 ? '刚刚' : `${mins(idle)}前`} · {mins(left)}后无操作将自动解散
     </div>
   )
 }

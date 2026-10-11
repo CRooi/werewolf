@@ -457,3 +457,16 @@ test('witch / hunter drafts are mirrored to god view only', () => {
   expect(room.view(judge.id, () => true).game!.hunter!.draft).toBe(0)
   expect(room.view(g.seats[6]!, () => true).game!.hunter).toBeNull()
 })
+
+test('extend: any member (incl. spectators) can extend; idle countdown in room view', () => {
+  const s = setup()
+  s.room.d.config.allowSpectators = true
+  const spec = s.room.spectate('看客')
+  s.room.d.lastActiveAt = Date.now() - 29 * 60_000
+  expect(s.room.view(s.judge.id, () => true).room.idleRemainingMs).toBeLessThan(61_000)
+  expect(s.room.isIdle(Date.now(), 30 * 60_000)).toBe(false)
+  // extend 本身合法（重置计时由传输层的 touch 完成）
+  expect(s.room.handle(spec.id, { type: 'extend' })).toEqual({})
+  s.room.touch()
+  expect(s.room.view(s.judge.id, () => true).room.idleRemainingMs).toBeGreaterThan(29 * 60_000)
+})

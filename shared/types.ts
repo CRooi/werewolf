@@ -249,6 +249,10 @@ export interface RoomView {
   swaps: SwapRequestView[]
   /** 观战席 */
   spectators: UserBrief[]
+  /** 距离因空闲自动解散还剩多少毫秒（生成视图时） */
+  idleRemainingMs: number
+  /** 剩余时间低于该值时提醒所有人，可点击延长 */
+  idleWarnMs: number
   /** 游戏进行中（未公布结果） */
   inGame: boolean
 }
@@ -307,6 +311,8 @@ export type ClientMessage =
   | { type: 'witchDraft'; save: boolean; poison: boolean; target: number | null }
   | { type: 'idiotDecide'; reveal: boolean }
   | { type: 'ping' }
+  /** 延长房间：重新开始空闲计时 */
+  | { type: 'extend' }
 
 export type ServerMessage =
   | { type: 'state'; state: StateView }

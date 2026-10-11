@@ -47,6 +47,8 @@ export interface AdminRoom {
   day: number | null
   gameId: string | null
   createdAt: number
+  lastActiveAt: number
+  idleTimeoutMs: number
 }
 
 export interface AdminGame {

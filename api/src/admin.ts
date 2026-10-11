@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import type express from 'express'
-import type { ClientMessage, JudgeStep } from '../../shared/types'
+import { DEFAULT_CONFIG, ROLE_ORDER, type ClientMessage, type JudgeStep } from '../../shared/types'
 import {
   addGameEvent,
   createGameRecord,
@@ -8,13 +8,16 @@ import {
   getGameEvents,
   getGameEventState,
   getGameRecord,
+  hasGameRecord,
   listGameRecords,
+  listOrphanGames,
 } from './db'
-import { type GameState, type ReplayMeta, Room } from './room'
+import { type GameState, type ReplayMeta, ROOM_IDLE_MS, Room } from './room'
 
 // ---------------- 鉴权 ----------------
 
 const TOKEN_TTL = 12 * 3600 * 1000
+
 const tokens = new Map<string, number>()
 
 export const adminEnabled = () => !!process.env.ADMIN_PASSWORD
@@ -121,6 +124,36 @@ function actorLabel(room: Room, userId: string) {
   return seat >= 0 ? `${seat + 1}号 ${name}` : name
 }
 
+/** 确保对局有记录行（记录功能上线前已开始的对局，在第一次被记录时补建） */
+function ensureRecord(room: Room, gameId: string) {
+  if (!hasGameRecord(gameId)) createGameRecord(gameId, room.d.code, room.replayMeta(), room.d.createdAt)
+}
+
+/**
+ * 启动时修复：有事件却没有对局行的记录补建对局行。
+ * 房间仍在时用房间信息；房间已不存在时，从最后一个局面推算板子，玩家名以座位号代替。
+ */
+export function repairOrphanGames(rooms: Map<string, Room>) {
+  try {
+    for (const o of listOrphanGames()) {
+      const state = JSON.parse(o.lastState) as GameState
+      const room = [...rooms.values()].find((r) => r.d.game?.id === o.id)
+      if (room) createGameRecord(o.id, room.d.code, room.replayMeta(), Math.min(o.startedAt, room.d.createdAt))
+      else {
+        const config = { ...DEFAULT_CONFIG, ...Object.fromEntries(ROLE_ORDER.map((r) => [r, state.roles.filter((x) => x === r).length])) }
+        const users: Record<string, string> = { '?': '法官' }
+        state.seats.forEach((id, i) => (users[id] = `${i + 1}号`))
+        createGameRecord(o.id, '----', { code: '----', config, judgeId: '?', users } satisfies ReplayMeta, o.startedAt)
+      }
+      if (state.phase === 'revealed') finishGameRecord(o.id, 'finished', state.winner)
+      else if (!room) finishGameRecord(o.id, 'aborted', null)
+      console.log(`已补建对局记录 ${o.id}`)
+    }
+  } catch (e) {
+    console.error('修复对局记录失败', e)
+  }
+}
+
 export interface BeforeAction {
   gameId: string | null
   json: string | null
@@ -143,6 +176,7 @@ export function recordAction(room: Room, userId: string, msg: ClientMessage, bef
     if (before.gameId && before.json && (disband || g?.id !== before.gameId)) {
       const prev = JSON.parse(before.json) as GameState
       if (prev.phase !== 'revealed') {
+        ensureRecord(room, before.gameId)
         addGameEvent(before.gameId, { ts: now, actor, text: disband ? '解散房间，对局终止' : '终止对局', phase: prev.phase, day: prev.day, state: prev })
         finishGameRecord(before.gameId, 'aborted', null)
       }
@@ -158,6 +192,7 @@ export function recordAction(room: Room, userId: string, msg: ClientMessage, bef
 
     const json = JSON.stringify(g)
     if (json === before.json) return
+    ensureRecord(room, g.id)
     // 本次操作引发的公告（死讯、放逐、开枪等）一并写进事件
     const fresh = g.announcements.slice(before.announcements).map((a) => a.text)
     const text = [describe(msg), ...fresh].join(' → ')
@@ -165,6 +200,24 @@ export function recordAction(room: Room, userId: string, msg: ClientMessage, bef
     if (g.phase === 'revealed') finishGameRecord(g.id, 'finished', g.winner)
   } catch (e) {
     console.error('记录对局事件失败', e)
+  }
+}
+
+/**
+ * 房间被关闭（空闲超时等）时收尾对局记录：
+ * 进行中的对局记为终止；记录功能上线前开始、库里没有记录的对局，补一条最终局面以便回看。
+ */
+export function recordRoomClosed(room: Room, reason: string) {
+  try {
+    const g = room.d.game
+    if (!g) return
+    const now = Date.now()
+    ensureRecord(room, g.id)
+    addGameEvent(g.id, { ts: now, actor: '系统', text: reason, phase: g.phase, day: g.day, state: g })
+    if (g.phase === 'revealed') finishGameRecord(g.id, 'finished', g.winner)
+    else finishGameRecord(g.id, 'aborted', null)
+  } catch (e) {
+    console.error('记录房间关闭失败', e)
   }
 }
 
@@ -198,6 +251,8 @@ export function registerAdminRoutes(app: express.Express, rooms: Map<string, Roo
             day: g?.day ?? null,
             gameId: g?.id ?? null,
             createdAt: r.d.createdAt,
+            lastActiveAt: r.d.lastActiveAt ?? r.d.createdAt,
+            idleTimeoutMs: ROOM_IDLE_MS,
           }
         })
         .sort((a, b) => Number(b.inGame) - Number(a.inGame) || b.createdAt - a.createdAt),

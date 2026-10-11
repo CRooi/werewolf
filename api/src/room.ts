@@ -27,6 +27,16 @@ import {
 
 export class GameError extends Error {}
 
+/** 房间空闲多久后自动解散（默认 30 分钟，可用 ROOM_IDLE_MINUTES 调整） */
+export const ROOM_IDLE_MS = (Number(process.env.ROOM_IDLE_MINUTES) > 0 ? Number(process.env.ROOM_IDLE_MINUTES) : 30) * 60_000
+/** 解散前多久开始提醒（默认最后 5 分钟） */
+export const ROOM_IDLE_WARN_MS = Math.min(5 * 60_000, ROOM_IDLE_MS / 2)
+
+/** 空闲时长的中文描述 */
+export function idleText(ms = ROOM_IDLE_MS) {
+  return ms >= 60_000 ? `${Math.round(ms / 60_000)} 分钟` : `${Math.round(ms / 1000)} 秒`
+}
+
 const fail = (msg: string): never => {
   throw new GameError(msg)
 }
@@ -121,6 +131,8 @@ export interface ReplayMeta {
 export interface RoomData {
   code: string
   createdAt: number
+  /** 最后一次有人操作的时间（用于空闲自动解散） */
+  lastActiveAt?: number
   config: RoomConfig
   judgeId: string
   users: Record<string, User>
@@ -198,6 +210,7 @@ export class Room {
     // 兼容旧数据
     d.spectators ??= []
     d.config.allowSpectators ??= false
+    d.lastActiveAt ??= d.createdAt
     d.config.idiot ??= 0
     if (d.game) {
       d.game.ghostChat ??= []
@@ -214,6 +227,7 @@ export class Room {
     const room = new Room({
       code,
       createdAt: Date.now(),
+      lastActiveAt: Date.now(),
       config: cfg,
       judgeId: user.id,
       users: { [user.id]: user },
@@ -223,6 +237,16 @@ export class Room {
       game: null,
     })
     return { room, user }
+  }
+
+  /** 记录一次操作 */
+  touch() {
+    this.d.lastActiveAt = Date.now()
+  }
+
+  /** 是否已空闲超过 timeoutMs */
+  isIdle(now: number, timeoutMs: number) {
+    return now - (this.d.lastActiveAt ?? this.d.createdAt) >= timeoutMs
   }
 
   get inGame() {
@@ -279,6 +303,9 @@ export class Room {
     const needLobby = () => {
       if (this.inGame) fail('游戏进行中')
     }
+
+    // 延长房间：任何成员都可以，由传输层在成功后重置空闲计时
+    if (msg.type === 'extend') return {}
 
     // 观战频道：出局玩家、观战席与法官可发言
     if (msg.type === 'ghostChat') {
@@ -1008,6 +1035,8 @@ export class Room {
         seats: d.seats.map((s) => (s ? brief(s) : null)),
         swaps: d.swaps.filter((s) => s.from === userId || s.to === userId).map((s) => ({ id: s.id, from: brief(s.from), to: brief(s.to) })),
         spectators: d.spectators.map(brief),
+        idleRemainingMs: Math.max(0, (d.lastActiveAt ?? d.createdAt) + ROOM_IDLE_MS - Date.now()),
+        idleWarnMs: ROOM_IDLE_WARN_MS,
         inGame: this.inGame,
       },
       game: d.game ? this.gameView(userId, isJudge, isSpectator, brief) : null,

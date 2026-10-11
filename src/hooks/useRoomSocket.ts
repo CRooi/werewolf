@@ -8,6 +8,8 @@ export type ConnStatus = 'connecting' | 'open' | 'closed'
 /** 连接房间 WebSocket，断线自动重连 */
 export function useRoomSocket(session: Session, onKicked: (reason: string) => void) {
   const [state, setState] = useState<StateView | null>(null)
+  /** 收到最新状态的本地时间，用于把服务端给的剩余时间换算成本地截止时间 */
+  const [receivedAt, setReceivedAt] = useState(0)
   const [status, setStatus] = useState<ConnStatus>('connecting')
   const wsRef = useRef<WebSocket | null>(null)
   const kickedRef = useRef(onKicked)
@@ -37,6 +39,7 @@ export function useRoomSocket(session: Session, onKicked: (reason: string) => vo
         switch (msg.type) {
           case 'state':
             setState(msg.state)
+            setReceivedAt(Date.now())
             break
           case 'error':
             toast.error(msg.message)
@@ -84,5 +87,5 @@ export function useRoomSocket(session: Session, onKicked: (reason: string) => vo
     else toast.error('连接已断开，正在重连…')
   }, [])
 
-  return { state, status, send }
+  return { state, status, send, receivedAt }
 }

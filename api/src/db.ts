@@ -20,11 +20,13 @@ export function deleteRoom(code: string) {
   del.run(code)
 }
 
-/** 加载最近 2 天内活跃的房间，清理更早的 */
+/** 加载所有房间；旧数据没有 lastActiveAt 时以最后保存时间为准（空闲的房间会在启动后被自动解散并记录） */
 export function loadRooms(): RoomData[] {
-  const cutoff = Date.now() - 2 * 24 * 3600 * 1000
-  db.prepare('DELETE FROM rooms WHERE updated_at < ?').run(cutoff)
-  return (db.prepare('SELECT data FROM rooms').all() as { data: string }[]).map((r) => JSON.parse(r.data) as RoomData)
+  return (db.prepare('SELECT data, updated_at FROM rooms').all() as { data: string; updated_at: number }[]).map((r) => {
+    const d = JSON.parse(r.data) as RoomData
+    d.lastActiveAt ??= r.updated_at
+    return d
+  })
 }
 
 // ---------------- 对局记录（后台回放） ----------------
@@ -76,8 +78,24 @@ const updateGame = db.prepare('UPDATE games SET status = ?, winner = ?, ended_at
 const insertEvent = db.prepare('INSERT INTO game_events (game_id, seq, ts, actor, text, phase, day, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
 const maxSeq = db.prepare('SELECT COALESCE(MAX(seq), -1) AS s FROM game_events WHERE game_id = ?')
 
-export function createGameRecord(id: string, code: string, meta: unknown) {
-  insertGame.run(id, code, JSON.stringify(meta), 'playing', Date.now())
+export function createGameRecord(id: string, code: string, meta: unknown, startedAt = Date.now()) {
+  insertGame.run(id, code, JSON.stringify(meta), 'playing', startedAt)
+}
+
+/** 有事件但缺少对局行的记录（记录功能上线前开始的对局） */
+export function listOrphanGames(): { id: string; startedAt: number; endedAt: number; lastState: string }[] {
+  return db
+    .prepare(
+      `SELECT e.game_id AS id, MIN(e.ts) AS startedAt, MAX(e.ts) AS endedAt,
+        (SELECT state FROM game_events x WHERE x.game_id = e.game_id ORDER BY seq DESC LIMIT 1) AS lastState
+       FROM game_events e LEFT JOIN games g ON g.id = e.game_id
+       WHERE g.id IS NULL GROUP BY e.game_id`,
+    )
+    .all() as { id: string; startedAt: number; endedAt: number; lastState: string }[]
+}
+
+export function hasGameRecord(id: string) {
+  return !!db.prepare('SELECT 1 FROM games WHERE id = ?').get(id)
 }
 
 export function finishGameRecord(id: string, status: Exclude<GameStatus, 'playing'>, winner: string | null) {

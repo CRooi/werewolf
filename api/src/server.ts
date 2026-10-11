@@ -5,8 +5,8 @@ import express from 'express'
 import { WebSocketServer, WebSocket } from 'ws'
 import type { ClientMessage, ServerMessage } from '../../shared/types'
 import { deleteRoom, loadRooms, saveRoom } from './db'
-import { recordAction, registerAdminRoutes, snapshotBefore, verifyAdminToken } from './admin'
-import { GameError, Room, genCode } from './room'
+import { recordAction, recordRoomClosed, registerAdminRoutes, repairOrphanGames, snapshotBefore, verifyAdminToken } from './admin'
+import { GameError, ROOM_IDLE_MS, Room, genCode, idleText } from './room'
 
 const rooms = new Map<string, Room>()
 for (const d of loadRooms()) rooms.set(d.code, new Room(d))
@@ -52,6 +52,25 @@ function broadcast(room: Room) {
   }
 }
 
+/** 关闭房间：通知所有连接并删除 */
+function closeRoom(code: string, reason: string) {
+  rooms.delete(code)
+  deleteRoom(code)
+  for (const [, s] of sockets.get(code) ?? []) for (const w of s) { send(w, { type: 'kicked', reason }); w.close() }
+  sockets.delete(code)
+}
+
+/** 空闲超时自动解散：对局记为终止，可在后台对局记录中回看 */
+function sweepIdleRooms() {
+  const now = Date.now()
+  for (const room of [...rooms.values()]) {
+    if (!room.isIdle(now, ROOM_IDLE_MS)) continue
+    recordRoomClosed(room, `${idleText()}无操作，房间自动解散`)
+    closeRoom(room.d.code, `房间 ${idleText()}无操作，已自动解散`)
+    console.log(`房间 ${room.d.code} 空闲超时，已自动解散`)
+  }
+}
+
 const app = express()
 app.use(express.json())
 
@@ -73,6 +92,7 @@ app.post('/api/rooms', wrap((req, res) => {
   const code = genCode((c) => rooms.has(c))
   const { room, user } = Room.create(code, req.body?.config ?? {}, req.body?.name)
   rooms.set(code, room)
+  room.touch()
   saveRoom(room.d)
   res.json({ code, token: user.token })
 }))
@@ -81,6 +101,7 @@ app.post('/api/rooms/:code/join', wrap((req, res) => {
   const room = rooms.get(String(req.params.code))
   if (!room) return void res.status(404).json({ error: '房间不存在' })
   const user = room.join(req.body?.name)
+  room.touch()
   saveRoom(room.d)
   broadcast(room)
   res.json({ code: room.d.code, token: user.token })
@@ -90,6 +111,7 @@ app.post('/api/rooms/:code/spectate', wrap((req, res) => {
   const room = rooms.get(String(req.params.code))
   if (!room) return void res.status(404).json({ error: '房间不存在' })
   const user = room.spectate(req.body?.name)
+  room.touch()
   saveRoom(room.d)
   broadcast(room)
   res.json({ code: room.d.code, token: user.token })
@@ -196,13 +218,8 @@ wss.on('connection', (ws, req) => {
       const before = snapshotBefore(cur)
       const fx = cur.handle(user.id, msg)
       recordAction(cur, user.id, msg, before, !!fx.disband)
-      if (fx.disband) {
-        rooms.delete(code)
-        deleteRoom(code)
-        for (const [, s] of sockets.get(code) ?? []) for (const w of s) { send(w, { type: 'kicked', reason: '房间已被法官解散' }); w.close() }
-        sockets.delete(code)
-        return
-      }
+      if (fx.disband) return closeRoom(code, '房间已被法官解散')
+      cur.touch()
       saveRoom(cur.d)
       if (fx.kicked) {
         const reason = fx.kicked === user.id ? '你已离开房间' : '你被法官请出了房间'
@@ -226,6 +243,11 @@ wss.on('connection', (ws, req) => {
     if (r) broadcast(r)
   })
 })
+
+repairOrphanGames(rooms)
+sweepIdleRooms()
+// 每分钟检查一次（超时设置很短时相应加快，便于测试）
+setInterval(sweepIdleRooms, Math.min(60_000, Math.max(1000, ROOM_IDLE_MS / 3)))
 
 const port = Number(process.env.PORT ?? 3001)
 server.listen(port, () => console.log(`🐺 werewolf api listening on http://localhost:${port}`))

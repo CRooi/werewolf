@@ -4,13 +4,14 @@ import { toast } from 'sonner'
 import { Scenery } from '@/components/art/Scenery'
 import { useRoomSocket } from '@/hooks/useRoomSocket'
 import { tabKey, type Session } from '@/lib/session'
+import { IdleWarning } from '@/components/game/IdleWarning'
 import { Lobby } from './Lobby'
 import { GameScreen } from './game/GameScreen'
 
 const DISMISS_KEY = tabKey('dismissed')
 
 export function RoomScreen({ session, onExit }: { session: Session; onExit: () => void }) {
-  const { state, status, send } = useRoomSocket(session, (reason) => {
+  const { state, status, send, receivedAt } = useRoomSocket(session, (reason) => {
     toast(reason)
     onExit()
   })
@@ -32,8 +33,11 @@ export function RoomScreen({ session, onExit }: { session: Session; onExit: () =
 
   const game = state.game
   const showGame = !!game && (state.room.inGame || dismissed !== game.id)
+  const idle = <IdleWarning room={state.room} receivedAt={receivedAt} send={send} />
   if (showGame) {
     return (
+      <>
+      {idle}
       <GameScreen
         state={state}
         status={status}
@@ -43,10 +47,13 @@ export function RoomScreen({ session, onExit }: { session: Session; onExit: () =
           setDismissed(game!.id)
         }}
       />
+      </>
     )
   }
   const canReview = game?.phase === 'revealed'
   return (
+    <>
+    {idle}
     <Lobby
       state={state}
       status={status}
@@ -60,5 +67,6 @@ export function RoomScreen({ session, onExit }: { session: Session; onExit: () =
           : undefined
       }
     />
+    </>
   )
 }
