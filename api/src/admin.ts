@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import type express from 'express'
-import { DEFAULT_CONFIG, ROLE_ORDER, type ClientMessage, type JudgeStep } from '../../shared/types'
+import { DEFAULT_CONFIG, ROLE_ORDER, type ClientMessage, type JudgeStep, type ReplayFile } from '../../shared/types'
 import {
   addGameEvent,
   createGameRecord,
@@ -307,6 +307,35 @@ export function registerAdminRoutes(app: express.Express, rooms: Map<string, Roo
       recovered: !!meta.recovered,
       events: getGameEvents(g.id),
     })
+  })
+
+  // 导出整局回放：每个事件附带当时的上帝视角，gzip 压缩后下载，可在本地查看器离线回放
+  app.get('/api/admin/games/:id/export', requireAdmin, (req, res) => {
+    const g = getGameRecord(String(req.params.id))
+    if (!g) return void res.status(404).json({ error: '对局不存在' })
+    const meta = JSON.parse(g.meta) as ReplayMeta & { backfilled?: boolean; recovered?: boolean }
+    const file: ReplayFile = {
+      format: 'werewolf-replay',
+      version: 1,
+      exportedAt: Date.now(),
+      game: {
+        id: g.id,
+        code: g.code,
+        round: g.round,
+        status: g.status,
+        winner: (g.winner as ReplayFile['game']['winner']) ?? null,
+        startedAt: g.started_at,
+        endedAt: g.ended_at,
+        backfilled: !!meta.backfilled,
+        recovered: !!meta.recovered,
+      },
+      events: getGameEvents(g.id).map((e) => ({ ...e, view: Room.replayView(meta, getGameEventState(g.id, e.seq) as GameState) })),
+    }
+    const day = new Date(g.started_at).toISOString().slice(0, 10).replace(/-/g, '')
+    const name = `狼人杀回放-房间${g.code}-第${g.round}局-${day}.wwreplay`
+    res.setHeader('Content-Type', 'application/gzip')
+    res.setHeader('Content-Disposition', `attachment; filename="werewolf-${g.code}-${g.round}.wwreplay"; filename*=UTF-8''${encodeURIComponent(name)}`)
+    res.send(Buffer.from(Bun.gzipSync(JSON.stringify(file))))
   })
 
   app.get('/api/admin/games/:id/events/:seq', requireAdmin, (req, res) => {

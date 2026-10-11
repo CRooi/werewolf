@@ -320,3 +320,43 @@ export type ServerMessage =
   | { type: 'swapResult'; accepted: boolean; by: string }
   | { type: 'kicked'; reason: string }
   | { type: 'pong' }
+
+// ---------- 对局回放 ----------
+
+export type ReplayStatus = 'playing' | 'finished' | 'aborted'
+
+/** 一局的基本信息 */
+export interface ReplayGameInfo {
+  id: string
+  code: string
+  /** 该房间的第几局 */
+  round: number
+  status: ReplayStatus
+  winner: Winner | null
+  startedAt: number
+  endedAt: number | null
+  /** 记录功能上线前的对局，只有最终局面 */
+  backfilled: boolean
+  /** 从数据库残留中恢复的对局 */
+  recovered: boolean
+}
+
+/** 时间轴上的一个事件 */
+export interface ReplayEvent {
+  seq: number
+  ts: number
+  actor: string
+  text: string
+  phase: string
+  day: number
+}
+
+/** 下载到本地的回放文件（.wwreplay，gzip 压缩的 JSON） */
+export interface ReplayFile {
+  format: 'werewolf-replay'
+  version: 1
+  exportedAt: number
+  game: ReplayGameInfo
+  /** 每个事件附带当时的上帝视角，离线即可回放 */
+  events: (ReplayEvent & { view: StateView })[]
+}

@@ -1,3 +1,5 @@
+import type { ReplayEvent, ReplayGameInfo } from '@shared/types'
+
 const KEY = 'ww.admin'
 
 export const loadAdminToken = () => {
@@ -69,15 +71,35 @@ export interface AdminGame {
   players: number
 }
 
-export interface GameEvent {
-  seq: number
-  ts: number
-  actor: string
-  text: string
-  phase: string
-  day: number
-}
+/** 时间轴事件 */
+export type GameEvent = ReplayEvent
 
 export const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString('zh-CN', { hour12: false })
 export const fmtDateTime = (ts: number) =>
   new Date(ts).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+/** 下载整局回放文件（.wwreplay） */
+export async function downloadReplay(id: string) {
+  const token = loadAdminToken()
+  const res = await fetch(`/api/admin/games/${id}/export`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (res.status === 401) throw new AuthError('请重新登录')
+  if (!res.ok) throw new Error('下载失败')
+  const cd = res.headers.get('Content-Disposition') ?? ''
+  const name = decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(cd)?.[1] ?? `werewolf-${id}.wwreplay`)
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export const gameStatus = (g: Pick<ReplayGameInfo, 'status' | 'winner'>): [string, string] =>
+  g.status === 'playing'
+    ? ['进行中', 'bg-emerald-500/20 text-emerald-300']
+    : g.status === 'aborted'
+      ? ['已终止', 'bg-white/10 text-muted-foreground']
+      : [g.winner === 'wolf' ? '狼人胜利' : '好人胜利', g.winner === 'wolf' ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300']
+
+export const duration = (g: Pick<ReplayGameInfo, 'startedAt' | 'endedAt' | 'backfilled'>) =>
+  g.backfilled ? '用时未知' : g.endedAt ? `用时 ${Math.max(1, Math.round((g.endedAt - g.startedAt) / 60000))} 分钟` : '进行中'

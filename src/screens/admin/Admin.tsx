@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronLeft, ChevronRight, Eye, History, LogOut, Pause, Play, RefreshCw, Shield } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Download, Eye, FileVideo, History, LogOut, RefreshCw, Shield } from 'lucide-react'
 import { toast } from 'sonner'
-import type { ServerMessage, StateView } from '@shared/types'
+import type { ReplayGameInfo, ServerMessage, StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,8 @@ import { ConnBadge } from '@/components/game/ConnBadge'
 import type { ConnStatus } from '@/hooks/useRoomSocket'
 import { PHASE_TITLE } from '../game/helpers'
 import { AdminBoard } from './AdminBoard'
-import { AuthError, adminApi, fmtDateTime, fmtTime, loadAdminToken, saveAdminToken, type AdminGame, type AdminRoom, type GameEvent } from './adminApi'
+import { AuthError, adminApi, downloadReplay, duration, fmtDateTime, gameStatus, loadAdminToken, saveAdminToken, type AdminGame, type AdminRoom, type GameEvent } from './adminApi'
+import { ReplayPlayer } from './ReplayPlayer'
 
 type View = { kind: 'list' } | { kind: 'live'; code: string } | { kind: 'replay'; id: string }
 
@@ -124,9 +125,16 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         </h1>
         <div className="ml-auto flex items-center gap-2">
           {view.kind === 'list' && (
-            <Button variant="stone" size="sm" onClick={refresh}>
-              <RefreshCw /> 刷新
-            </Button>
+            <>
+              <Button variant="ghost" size="sm" asChild>
+                <a href="?replay" target="_blank" rel="noreferrer">
+                  <FileVideo /> 本地回放查看器
+                </a>
+              </Button>
+              <Button variant="stone" size="sm" onClick={refresh}>
+                <RefreshCw /> 刷新
+              </Button>
+            </>
           )}
           <Button variant="ghost" size="sm" onClick={onLogout}>
             <LogOut /> 退出
@@ -136,7 +144,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
       <div className="min-h-0 flex-1">
         {view.kind === 'live' && <LiveView code={view.code} token={token} onAuthFail={onLogout} />}
-        {view.kind === 'replay' && <Replay id={view.id} onError={guard} />}
+        {view.kind === 'replay' && <ServerReplay id={view.id} onError={guard} />}
         {view.kind === 'list' && (
           <div className="flex h-full min-h-0 flex-col gap-3">
             <div className="flex gap-2">
@@ -159,7 +167,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
               {tab === 'rooms' ? (
                 <RoomList rooms={rooms} fetchedAt={fetchedAt} onOpen={(code) => setView({ kind: 'live', code })} />
               ) : (
-                <GameList games={games} onOpen={(id) => setView({ kind: 'replay', id })} />
+                <GameList games={games} onOpen={(id) => setView({ kind: 'replay', id })} onError={guard} />
               )}
             </div>
           </div>
@@ -207,18 +215,8 @@ function IdleInfo({ room, now }: { room: AdminRoom; now: number }) {
   )
 }
 
-const gameStatus = (g: Pick<AdminGame, 'status' | 'winner'>): [string, string] =>
-  g.status === 'playing'
-    ? ['进行中', 'bg-emerald-500/20 text-emerald-300']
-    : g.status === 'aborted'
-      ? ['已终止', 'bg-white/10 text-muted-foreground']
-      : [g.winner === 'wolf' ? '狼人胜利' : '好人胜利', g.winner === 'wolf' ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300']
-
-const duration = (g: Pick<AdminGame, 'startedAt' | 'endedAt' | 'backfilled'>) =>
-  g.backfilled ? '用时未知' : g.endedAt ? `用时 ${Math.max(1, Math.round((g.endedAt - g.startedAt) / 60000))} 分钟` : '进行中'
-
 /** 对局列表：每次发牌算一局，同一房间的多局分别列出 */
-function GameList({ games, onOpen }: { games: AdminGame[]; onOpen: (id: string) => void }) {
+function GameList({ games, onOpen, onError }: { games: AdminGame[]; onOpen: (id: string) => void; onError: (e: unknown) => void }) {
   const [q, setQ] = useState('')
   const shown = q ? games.filter((g) => g.code.includes(q)) : games
   return (
@@ -250,7 +248,10 @@ function GameList({ games, onOpen }: { games: AdminGame[]; onOpen: (id: string) 
                 </span>
                 {g.backfilled && <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">补记 · 仅最终局面</span>}
                 {g.recovered && <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">从数据库残留恢复</span>}
-                <Button variant="stone" size="sm" className="ml-auto" onClick={() => onOpen(g.id)}>
+                <Button variant="ghost" size="sm" className="ml-auto" onClick={() => downloadReplay(g.id).catch(onError)} aria-label="下载回放">
+                  <Download /> 下载
+                </Button>
+                <Button variant="stone" size="sm" onClick={() => onOpen(g.id)}>
                   <History /> 回放
                 </Button>
               </div>
@@ -318,181 +319,41 @@ function LiveView({ code, token, onAuthFail }: { code: string; token: string; on
 
 // ---------------- 回放 ----------------
 
-interface GameDetail {
-  id: string
-  code: string
-  round: number
-  backfilled: boolean
-  recovered: boolean
-  status: AdminGame['status']
-  winner: AdminGame['winner']
-  startedAt: number
-  endedAt: number | null
+interface GameDetail extends ReplayGameInfo {
   events: GameEvent[]
 }
 
-const SPEEDS = [1, 2, 4]
-
-function Replay({ id, onError }: { id: string; onError: (e: unknown) => void }) {
+/** 后台回放：从服务端按需加载每个时间点的局面 */
+function ServerReplay({ id, onError }: { id: string; onError: (e: unknown) => void }) {
   const [detail, setDetail] = useState<GameDetail | null>(null)
-  const [index, setIndex] = useState(0)
-  const [views, setViews] = useState<Record<number, StateView>>({})
-  const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1)
-  const listRef = useRef<HTMLDivElement>(null)
-
+  const [busy, setBusy] = useState(false)
   useEffect(() => {
-    adminApi<GameDetail>(`/api/admin/games/${id}`).then((d) => {
-      setDetail(d)
-      setIndex(0)
-    }, onError)
+    adminApi<GameDetail>(`/api/admin/games/${id}`).then(setDetail, onError)
   }, [id, onError])
-
-  const events = useMemo(() => detail?.events ?? [], [detail])
-  const current = events[index]
-
-  // 按需加载某个时间点的局面，并预取下一个
-  useEffect(() => {
-    if (!current) return
-    for (const ev of [current, events[index + 1]]) {
-      if (!ev || views[ev.seq]) continue
-      adminApi<StateView>(`/api/admin/games/${id}/events/${ev.seq}`).then((v) => setViews((m) => ({ ...m, [ev.seq]: v })), onError)
-    }
-  }, [current, events, index, id, views, onError])
-
-  // 自动播放：播到最后一个事件自然停止
-  const isPlaying = playing && index < events.length - 1
-  useEffect(() => {
-    if (!isPlaying) return
-    const t = setTimeout(() => setIndex((i) => i + 1), 1200 / speed)
-    return () => clearTimeout(t)
-  }, [isPlaying, index, speed])
-
-  // 当前事件滚动到可视区域
-  useEffect(() => {
-    listRef.current?.querySelector(`[data-seq="${current?.seq}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [current?.seq])
-
-  // ← → 切换事件，空格播放 / 暂停
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return
-      if (e.key === 'ArrowLeft') setIndex((i) => Math.max(0, i - 1))
-      else if (e.key === 'ArrowRight') setIndex((i) => Math.min(events.length - 1, i + 1))
-      else if (e.key === ' ') {
-        e.preventDefault()
-        setPlaying((p) => !p)
-      } else return
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [events.length])
-
+  const loadView = useCallback((seq: number) => adminApi<StateView>(`/api/admin/games/${id}/events/${seq}`), [id])
   if (!detail) return <div className="py-20 text-center text-gold-soft">正在加载对局…</div>
-  if (!events.length) return <div className="py-20 text-center text-gold-soft">这局没有记录到事件</div>
-
-  // 无快照时显示最近一次已加载的局面，避免闪烁
-  const view = (() => {
-    for (let i = index; i >= 0; i--) {
-      const v = views[events[i]!.seq]
-      if (v) return v
-    }
-    return null
-  })()
-  const elapsed = current ? current.ts - detail.startedAt : 0
-
-  const timeline = (
-    <div ref={listRef} className="space-y-1">
-      {events.map((ev, i) => (
-        <button
-          key={ev.seq}
-          data-seq={ev.seq}
-          onClick={() => {
-            setIndex(i)
-            setPlaying(false)
-          }}
-          className={cn(
-            'flex w-full gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition',
-            i === index ? 'bg-gold/25 ring-1 ring-gold/60' : i < index ? 'bg-black/30 text-white/70' : 'bg-black/15 text-white/45 hover:bg-black/30',
-          )}
-        >
-          <span className="shrink-0 font-mono text-muted-foreground">{fmtTime(ev.ts)}</span>
-          <span className="shrink-0 text-gold-soft">{ev.actor}</span>
-          <span className="min-w-0 flex-1 break-words">{ev.text}</span>
-        </button>
-      ))}
-    </div>
-  )
-
-  const [statusLabel, statusCls] = gameStatus(detail)
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex items-center gap-3 text-sm">
-        <span className="font-display text-xl text-gold-soft">
-          房间 {detail.code} · 第 {detail.round} 局
-        </span>
-        <span className={cn('rounded-full px-2 py-0.5 text-xs', statusCls)}>{statusLabel}</span>
-        <span className="text-muted-foreground">
-          {detail.backfilled ? `${fmtDateTime(detail.startedAt)} 最后操作` : `${fmtDateTime(detail.startedAt)} 发牌`} · {duration(detail)} · {events.length} 个事件
-        </span>
-        {detail.recovered && <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">从数据库残留恢复，操作者由前后局面推断</span>}
-      </div>
-      {events.length <= 1 && (
-        <div className="rounded-lg bg-black/40 px-4 py-2 text-sm text-amber-200">
-          这局开始于记录功能上线之前，只保存了最终局面，没有可回放的过程。
-        </div>
-      )}
-      <div className="min-h-0 flex-1">{view ? <AdminBoard state={view} extraTab={{ label: '时间轴', content: timeline }} /> : <div className="py-20 text-center text-gold-soft">加载局面…</div>}</div>
-
-      {/* 时间轴控制条（只有一个事件时没有过程可回放，不显示） */}
-      {events.length > 1 && (
-      <div className="panel flex items-center gap-3 px-4 py-3">
-        <Button variant="stone" size="icon-lg" onClick={() => setIndex((i) => Math.max(0, i - 1))} aria-label="上一步">
-          <ChevronLeft />
-        </Button>
+    <ReplayPlayer
+      key={id}
+      game={detail}
+      events={detail.events}
+      loadView={loadView}
+      onError={onError}
+      actions={
         <Button
-          variant="gold"
-          size="icon-lg"
+          variant="stone"
+          size="sm"
+          disabled={busy}
           onClick={() => {
-            if (index >= events.length - 1) setIndex(0)
-            setPlaying(!isPlaying)
+            setBusy(true)
+            downloadReplay(id)
+              .catch(onError)
+              .finally(() => setBusy(false))
           }}
-          aria-label={isPlaying ? '暂停' : '播放'}
         >
-          {isPlaying ? <Pause /> : <Play />}
+          <Download /> {busy ? '正在打包…' : '下载回放'}
         </Button>
-        <Button variant="stone" size="icon-lg" onClick={() => setIndex((i) => Math.min(events.length - 1, i + 1))} aria-label="下一步">
-          <ChevronRight />
-        </Button>
-        <button className="rounded-full bg-black/40 px-2.5 py-1 text-xs text-gold-soft" onClick={() => setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]!)}>
-          {speed}×
-        </button>
-        <input
-          type="range"
-          min={0}
-          max={events.length - 1}
-          value={index}
-          onChange={(e) => {
-            setIndex(Number(e.target.value))
-            setPlaying(false)
-          }}
-          className="h-2 min-w-0 flex-1 cursor-pointer accent-[#e8b45a]"
-        />
-        <span className="w-20 shrink-0 text-right font-mono text-xs text-muted-foreground">
-          {index + 1}/{events.length}
-        </span>
-        <span className="w-16 shrink-0 text-right font-mono text-xs text-muted-foreground">
-          +{Math.floor(elapsed / 60000)}:{String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0')}
-        </span>
-      </div>
-      )}
-      {current && (
-        <div className="-mt-1 truncate px-1 text-sm">
-          <span className="font-mono text-muted-foreground">{fmtTime(current.ts)}</span>
-          <span className="mx-2 text-gold-soft">{current.actor}</span>
-          {current.text}
-        </div>
-      )}
-    </div>
+      }
+    />
   )
 }
