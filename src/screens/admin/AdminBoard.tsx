@@ -3,18 +3,21 @@ import { ROLE_NAME, ROLE_ORDER, type StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { ChatBox, VoteBoard } from '../game/ActionPanels'
 import { PHASE_TITLE, isNight } from '../game/helpers'
+import { JudgeDock } from '../game/JudgeDock'
+import { MirrorPanel } from '../game/MirrorPanel'
 import { NightSummary } from '../game/Stage'
 import { Table } from '../Overview'
 
-type Tab = 'summary' | 'wolf' | 'ghost' | 'log' | 'ann' | 'extra'
+type Tab = 'live' | 'summary' | 'wolf' | 'ghost' | 'log' | 'ann' | 'extra'
 
 /** 后台上帝视角：圆桌 + 侧栏（速览 / 频道 / 法官记录 / 公告） */
 export function AdminBoard({ state, extraTab }: { state: StateView; extraTab?: { label: string; content: ReactNode } }) {
-  const [tab, setTab] = useState<Tab>(extraTab ? 'extra' : 'summary')
+  const [tab, setTab] = useState<Tab>('live')
   const g = state.game
   const c = state.room.config
 
   const tabs: [Tab, string][] = [
+    ['live', '当前操作'],
     ...(extraTab ? ([['extra', extraTab.label]] as [Tab, string][]) : []),
     ['summary', '速览'],
     ['wolf', `狼人频道${g?.wolf ? `（${g.wolf.chat.length}）` : ''}`],
@@ -52,6 +55,18 @@ export function AdminBoard({ state, extraTab }: { state: StateView; extraTab?: {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {tab === 'extra' && extraTab?.content}
+          {tab === 'live' &&
+            (g ? (
+              <div className="space-y-3">
+                <MirrorPanel g={g} />
+                <div className="panel p-3">
+                  <div className="mb-2 text-xs text-gold-soft/70">⚖️ 法官控制台（只读）</div>
+                  <JudgeDock g={g} send={() => {}} readOnly />
+                </div>
+              </div>
+            ) : (
+              <Empty text="房间还没有开始对局" />
+            ))}
           {tab === 'summary' &&
             (g ? (
               <div className="space-y-3">

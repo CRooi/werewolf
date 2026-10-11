@@ -154,6 +154,7 @@ export interface WitchView {
   poisoned: number | null
   bothSameNight: boolean
   selfSave: boolean
+  draft: WitchDraft
 }
 
 export interface Ballot {
@@ -183,6 +184,15 @@ export interface HunterView {
   seat: number
   context: 'night' | 'vote'
   done: boolean
+  target: number | null
+  /** 猎人正在瞄准的玩家（未开枪前的实时选择） */
+  draft: number | null
+}
+
+/** 女巫在面板上的实时选择（确定前），用于上帝视角镜像 */
+export interface WitchDraft {
+  save: boolean
+  poison: boolean
   target: number | null
 }
 
@@ -293,6 +303,8 @@ export type ClientMessage =
   | { type: 'voteSelect'; choice: VoteChoice }
   | { type: 'voteConfirm' }
   | { type: 'hunterShoot'; target: number | null }
+  | { type: 'hunterDraft'; target: number | null }
+  | { type: 'witchDraft'; save: boolean; poison: boolean; target: number | null }
   | { type: 'idiotDecide'; reveal: boolean }
   | { type: 'ping' }
 

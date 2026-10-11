@@ -96,6 +96,12 @@ function describe(msg: ClientMessage): string {
       return msg.choice === null ? '取消投票选择' : msg.choice === 'abstain' ? '选择弃票' : `选择投给 ${seatText(msg.choice)}`
     case 'voteConfirm':
       return '确认投票'
+    case 'witchDraft': {
+      const parts = [msg.save && '解药', msg.poison && (msg.target !== null ? `毒药 → ${seatText(msg.target)}` : '毒药')].filter(Boolean)
+      return parts.length ? `正在选择：${parts.join('、')}` : '取消选择'
+    }
+    case 'hunterDraft':
+      return msg.target === null ? '取消瞄准' : `瞄准 ${seatText(msg.target)}`
     case 'hunterShoot':
       return msg.target === null ? '猎人选择不带人' : `猎人开枪带走 ${seatText(msg.target)}`
     case 'idiotDecide':

@@ -436,3 +436,24 @@ test('players dead on day 1 cannot watch until night 2; later deaths watch immed
   expect(d2.watchLocked).toBe(false)
   expect(d2.watching).toBe(true)
 })
+
+test('witch / hunter drafts are mirrored to god view only', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  const { J, as, room, judge } = s
+  const g = room.d.game!
+  J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
+  as(0, { type: 'wolfSelect', choice: 4 }); as(1, { type: 'wolfSelect', choice: 4 }); as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  J('seerWake'); as(2, { type: 'openEyes' }); J('seerPick'); as(2, { type: 'seerSelect', seat: 0 }); as(2, { type: 'seerConfirm' }); J('seerReveal'); J('seerClose')
+  J('witchWake'); as(3, { type: 'openEyes' }); J('witchInform')
+  expect(() => as(5, { type: 'witchDraft', save: false, poison: true, target: 1 })).toThrow()
+  as(3, { type: 'witchDraft', save: false, poison: true, target: 1 })
+  expect(room.view(judge.id, () => true).game!.witch!.draft).toEqual({ save: false, poison: true, target: 1 })
+  expect(room.view(g.seats[6]!, () => true).game!.witch).toBeNull()
+  as(3, { type: 'witchAct', save: false, poison: null }); J('witchClose'); J('dawn')
+  // 猎人（seat 4）被刀，瞄准过程同步给法官
+  expect(g.phase).toBe('hunter')
+  as(4, { type: 'hunterDraft', target: 0 })
+  expect(room.view(judge.id, () => true).game!.hunter!.draft).toBe(0)
+  expect(room.view(g.seats[6]!, () => true).game!.hunter).toBeNull()
+})

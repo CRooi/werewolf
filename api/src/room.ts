@@ -20,6 +20,7 @@ import {
   type StateView,
   type VoteChoice,
   type VoteResult,
+  type WitchDraft,
   type Winner,
   type WolfChoice,
 } from '../../shared/types'
@@ -58,6 +59,8 @@ interface NightState {
   witchActed: boolean
   saved: boolean
   poisoned: number | null
+  /** 女巫面板上的实时选择 */
+  witchDraft: WitchDraft
 }
 
 interface VoteState {
@@ -69,6 +72,8 @@ interface VoteState {
 }
 
 interface HunterState {
+  /** 正在瞄准的玩家 */
+  draft?: number | null
   seat: number
   context: 'night' | 'vote'
   done: boolean
@@ -149,6 +154,7 @@ function freshNight(): NightState {
     witchActed: false,
     saved: false,
     poisoned: null,
+    witchDraft: { save: false, poison: false, target: null },
   }
 }
 
@@ -643,6 +649,22 @@ export class Room {
         this.idiotDecide(!!msg.reveal)
         return
       }
+      // 女巫 / 猎人在面板上的实时选择，同步给上帝视角
+      case 'witchDraft': {
+        this.expect('witch_act')
+        if (myRole !== 'witch' || !meAlive || g.night.witchActed) fail('你不能操作')
+        const t = msg.target
+        g.night.witchDraft = { save: !!msg.save, poison: !!msg.poison, target: typeof t === 'number' && g.alive[t] ? t : null }
+        return
+      }
+      case 'hunterDraft': {
+        this.expect('hunter')
+        const h = g.hunter!
+        if (mySeat !== h.seat || h.done) fail('你不能操作')
+        const t = msg.target
+        h.draft = typeof t === 'number' && g.alive[t] && t !== mySeat ? t : null
+        return
+      }
       case 'hunterShoot': {
         this.expect('hunter')
         const h = g.hunter!
@@ -1076,12 +1098,13 @@ export class Room {
               acted: n.witchActed,
               saved: n.saved,
               poisoned: n.poisoned,
+              draft: n.witchDraft ?? { save: false, poison: false, target: null },
               bothSameNight: c.witchBothSameNight,
               selfSave: c.witchSelfSave,
             }
           : null,
       vote: g.vote,
-      hunter: g.hunter && (isJudge || isSpectator || g.hunter.seat === mySeat) ? g.hunter : null,
+      hunter: g.hunter && (godView || g.hunter.seat === mySeat) ? { ...g.hunter, draft: g.hunter.draft ?? null } : null,
       idiot: g.idiot && (godView || g.idiot.seat === mySeat) ? g.idiot : null,
       idiotRevealed: g.idiotRevealed,
       hasSeer: c.seer > 0,

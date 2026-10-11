@@ -35,7 +35,8 @@ function DeadHint({ role }: { role: string }) {
 }
 
 /** 法官控制台：根据阶段显示下一步按钮与进度 */
-export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
+/** 法官控制台；readOnly 用于后台上帝视角，按钮全部禁用，仅展示进度与提示 */
+export function JudgeDock({ g, send, readOnly }: { g: GameView; send: Send; readOnly?: boolean }) {
   const [choosingTie, setChoosingTie] = useState(false)
   const step = (s: JudgeStep) => send({ type: 'judge', step: s })
 
@@ -271,5 +272,9 @@ export function JudgeDock({ g, send }: { g: GameView; send: Send }) {
       break
   }
 
-  return <div className="space-y-2">{body}</div>
+  return (
+    <fieldset disabled={readOnly} className={cn('min-w-0 space-y-2', readOnly && '[&_*]:!animate-none')}>
+      {body}
+    </fieldset>
+  )
 }

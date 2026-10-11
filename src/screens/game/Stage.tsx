@@ -1,7 +1,7 @@
 import type { Announcement, ClientMessage, GameView, StateView } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { EyeClosed, EyeOpen } from '@/components/art/icons'
-import { WolfChat } from './ActionPanels'
+import { MirrorPanel } from './MirrorPanel'
 import { PHASE_TITLE, isNight } from './helpers'
 
 function Moon() {
@@ -78,8 +78,9 @@ export function Stage({ state, send }: { state: StateView; send: (m: ClientMessa
 
       {/* 内容区 */}
       <div className="flex flex-1 flex-col gap-2">
+        {/* 法官与观战者：实时镜像正在行动的玩家的界面，下方附文字速览 */}
+        {(isJudge || g.watching) && <MirrorPanel g={g} isJudge={isJudge} send={isJudge ? send : undefined} />}
         {night && (isJudge || g.watching) && <NightSummary g={g} />}
-        {night && (isJudge || g.watching) && g.wolf && ['wolf_wake', 'wolf_pick'].includes(g.phase) && <WolfChat g={g} send={isJudge ? send : undefined} readOnly={!isJudge} />}
         {dark && !isJudge && !(night && g.watching) && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-sm text-gold-soft/70">
             {g.phase === 'dealt' ? (state.me.isSpectator ? '身份已发放，所有身份已显示在座位上' : '身份已发放，记住你的身份，等待法官宣布天黑') : !g.meAlive ? '你已出局，请保持安静' : myTurn ? '轮到你了，请点击下方「睁眼」' : eyesOpenForMe ? '请按提示完成操作' : '夜幕笼罩村庄，请安静等待…'}

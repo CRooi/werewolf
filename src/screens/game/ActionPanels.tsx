@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Ban, Check, Send } from 'lucide-react'
-import { JUDGE_CHAT_SEAT, SPECTATOR_CHAT_SEAT, type ChatMessage, type ClientMessage, type GameView } from '@shared/types'
+import { JUDGE_CHAT_SEAT, SPECTATOR_CHAT_SEAT, type ChatMessage, type ClientMessage, type GameView, type WitchDraft } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -72,14 +72,21 @@ const aliveSeats = (g: GameView) => g.players.filter((p) => p.alive).map((p) => 
 
 // ---------------- 狼人 ----------------
 
-export function WolfPanel({ g, send }: { g: GameView; send: Send }) {
+/**
+ * 狼人选人面板。mirror 为上帝视角镜像：只读展示狼人看到的界面；
+ * canChat 控制镜像模式下能否在狼人频道发言（法官夜间可发言）。
+ */
+export function WolfPanel({ g, send, mirror, canChat }: { g: GameView; send?: Send; mirror?: boolean; canChat?: boolean }) {
   const w = g.wolf!
-  const me = g.mySeat!
-  const mine = w.selections[me] ?? null
+  const me = mirror ? null : g.mySeat
+  const mine = me !== null ? (w.selections[me] ?? null) : null
   const choices = w.aliveSeats.map((s) => w.selections[s] ?? null)
   const unanimous = choices.length > 0 && choices[0] !== null && choices.every((c) => c === choices[0])
   const pickers = (target: number | 'none') => w.aliveSeats.filter((s) => w.selections[s] === target)
-  const pick = (c: number | 'none') => !w.confirmed && send({ type: 'wolfSelect', choice: mine === c ? null : c })
+  const pick = (c: number | 'none') => !mirror && !w.confirmed && send?.({ type: 'wolfSelect', choice: mine === c ? null : c })
+  // 镜像时高亮意见统一的目标
+  const highlight = mirror ? (unanimous && typeof choices[0] === 'number' ? choices[0] : null) : typeof mine === 'number' ? mine : null
+  const noneActive = mirror ? unanimous && choices[0] === 'none' : mine === 'none'
 
   return (
     <div className="space-y-3">
@@ -93,18 +100,20 @@ export function WolfPanel({ g, send }: { g: GameView; send: Send }) {
           <PickGrid
             g={g}
             seats={aliveSeats(g)}
-            selected={typeof mine === 'number' ? mine : null}
+            selected={highlight}
             tone="blood"
+            disabled={mirror}
             onPick={pick}
             tag={(s) => w.seats.includes(s) && <span className="absolute -bottom-1 -right-2 rounded bg-blood px-1 text-[9px] text-white">狼</span>}
             marks={(s) => pickers(s).map((p) => <PawChip key={p} seat={p} />)}
           />
           <button
             type="button"
+            disabled={mirror}
             onClick={() => pick('none')}
             className={cn(
               'flex w-full items-center justify-between rounded-xl border-2 px-3 py-2 text-sm transition',
-              mine === 'none' ? 'border-blood bg-blood/20' : 'border-white/10 bg-black/30',
+              noneActive ? 'border-blood bg-blood/20' : 'border-white/10 bg-black/30',
             )}
           >
             <span className="flex items-center gap-2">
@@ -119,13 +128,13 @@ export function WolfPanel({ g, send }: { g: GameView; send: Send }) {
                 ({choices.filter((c) => c !== null).length}/{w.aliveSeats.length} 已选择)
               </span>
             </div>
-            <Button variant="blood" size="lg2" disabled={!unanimous} onClick={() => send({ type: 'wolfConfirm' })}>
+            <Button variant="blood" size="lg2" disabled={mirror || !unanimous} onClick={() => send?.({ type: 'wolfConfirm' })}>
               <Crosshair className="size-4" /> 确定
             </Button>
           </div>
         </>
       )}
-      <WolfChat g={g} send={send} />
+      <WolfChat g={g} send={send} readOnly={mirror && !canChat} />
     </div>
   )
 }
@@ -247,7 +256,7 @@ export function WolfChat({ g, send, readOnly }: { g: GameView; send?: Send; read
 
 // ---------------- 预言家 ----------------
 
-export function SeerPanel({ g, send }: { g: GameView; send: Send }) {
+export function SeerPanel({ g, send, mirror }: { g: GameView; send?: Send; mirror?: boolean }) {
   const s = g.seer!
   const history = Object.fromEntries(s.history.map((h) => [h.seat, h.result]))
   if (g.phase === 'seer_result' && s.result && s.selection !== null) {
@@ -267,18 +276,18 @@ export function SeerPanel({ g, send }: { g: GameView; send: Send }) {
     <div className="space-y-3">
       <PickGrid
         g={g}
-        seats={aliveSeats(g).filter((x) => x !== g.mySeat)}
+        seats={aliveSeats(g).filter((x) => x !== s.seat)}
         selected={s.selection}
         tone="mystic"
-        disabled={s.confirmed}
-        onPick={(seat) => send({ type: 'seerSelect', seat })}
+        disabled={mirror || s.confirmed}
+        onPick={(seat) => send?.({ type: 'seerSelect', seat })}
         marks={(seat) => history[seat] && <span className="text-xs">{history[seat] === 'good' ? '👍' : '👎'}</span>}
       />
       {s.confirmed ? (
         <div className="text-center text-sm text-muted-foreground">已选择 {seatName(g, s.selection!)}，等待法官验明身份…</div>
       ) : (
-        <Button variant="mystic" size="xl" className="w-full" disabled={s.selection === null} onClick={() => send({ type: 'seerConfirm' })}>
-          <Check /> 确定查验
+        <Button variant="mystic" size="xl" className="w-full" disabled={mirror || s.selection === null} onClick={() => send?.({ type: 'seerConfirm' })}>
+          <Check /> {mirror ? (s.selection === null ? '预言家正在选择…' : `预言家正在看 ${seatName(g, s.selection)}`) : '确定查验'}
         </Button>
       )}
     </div>
@@ -287,17 +296,23 @@ export function SeerPanel({ g, send }: { g: GameView; send: Send }) {
 
 // ---------------- 女巫 ----------------
 
-export function WitchPanel({ g, send }: { g: GameView; send: Send }) {
+export function WitchPanel({ g, send, mirror }: { g: GameView; send?: Send; mirror?: boolean }) {
   const w = g.witch!
-  const [save, setSave] = useState(false)
-  const [poisonMode, setPoisonMode] = useState(false)
-  const [target, setTarget] = useState<number | null>(null)
+  const [local, setLocal] = useState<WitchDraft>({ save: false, poison: false, target: null })
+  // 镜像时展示女巫的实时选择；女巫本人改动时同步到服务端
+  const draft = mirror ? w.draft : local
+  const update = (d: WitchDraft) => {
+    if (mirror) return
+    setLocal(d)
+    send?.({ type: 'witchDraft', ...d })
+  }
 
   if (w.acted) {
+    const who = mirror ? '女巫' : '你'
     return (
       <div className="py-6 text-center">
         <div className="font-display text-xl text-emerald-200">
-          {w.saved && w.poisoned !== null ? '你使用了解药和毒药' : w.saved ? '你使用了解药' : w.poisoned !== null ? `你毒杀了 ${seatName(g, w.poisoned)}` : '今晚你没有用药'}
+          {w.saved && w.poisoned !== null ? `${who}使用了解药和毒药` : w.saved ? `${who}使用了解药` : w.poisoned !== null ? `${who}毒杀了 ${seatName(g, w.poisoned)}` : `今晚${who}没有用药`}
         </div>
         <div className="mt-2 text-xs text-muted-foreground">等待法官让女巫闭眼</div>
       </div>
@@ -305,39 +320,37 @@ export function WitchPanel({ g, send }: { g: GameView; send: Send }) {
   }
 
   const victim = w.victim
-  const selfBlocked = victim === g.mySeat && !w.selfSave
-  const canSave = w.antidote && victim !== null && !selfBlocked
+  // 镜像时只展示女巫本人能看到的死讯
+  const showVictim = w.canSeeVictim
+  const selfBlocked = victim === w.seat && !w.selfSave
+  const canSave = w.antidote && showVictim && victim !== null && !selfBlocked
   const toggleSave = () => {
     if (!canSave) return
-    setSave(!save)
-    if (!save && !w.bothSameNight) {
-      setPoisonMode(false)
-      setTarget(null)
-    }
+    const save = !draft.save
+    update(save && !w.bothSameNight ? { save, poison: false, target: null } : { ...draft, save })
   }
   const togglePoison = () => {
     if (!w.poison) return
-    setPoisonMode(!poisonMode)
-    if (poisonMode) setTarget(null)
-    if (!poisonMode && !w.bothSameNight) setSave(false)
+    const poison = !draft.poison
+    update({ save: poison && !w.bothSameNight ? false : draft.save, poison, target: poison ? draft.target : null })
   }
-  const ready = save || (poisonMode && target !== null)
+  const ready = draft.save || (draft.poison && draft.target !== null)
 
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-moss/40 bg-black/40 p-3 text-center">
         <div className="text-[11px] tracking-widest text-emerald-200/70">今晚的死亡情况</div>
         <div className="mt-1 font-display text-xl">
-          {!w.canSeeVictim ? <span className="text-muted-foreground">解药已用完，无法得知</span> : victim === null ? '平安夜，无人被猎杀' : <span className="text-red-300">{seatName(g, victim)} 被猎杀</span>}
+          {!showVictim ? <span className="text-muted-foreground">解药已用完，无法得知</span> : victim === null ? '平安夜，无人被猎杀' : <span className="text-red-300">{seatName(g, victim)} 被猎杀</span>}
         </div>
-        {selfBlocked && w.antidote && <div className="mt-1 text-xs text-amber-300">女巫不能自救</div>}
+        {selfBlocked && w.antidote && showVictim && <div className="mt-1 text-xs text-amber-300">女巫不能自救</div>}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          disabled={!canSave}
+          disabled={mirror || !canSave}
           onClick={toggleSave}
-          className={cn('flex flex-col items-center gap-1 rounded-xl border-2 p-3 transition disabled:opacity-35', save ? 'border-moss bg-moss/25' : 'border-white/10 bg-black/30')}
+          className={cn('flex flex-col items-center gap-1 rounded-xl border-2 p-3 transition', !canSave && 'opacity-35', draft.save ? 'border-moss bg-moss/25' : 'border-white/10 bg-black/30')}
         >
           <Potion color="#34d399" className="size-10" />
           <span className="font-display">使用解药</span>
@@ -345,9 +358,9 @@ export function WitchPanel({ g, send }: { g: GameView; send: Send }) {
         </button>
         <button
           type="button"
-          disabled={!w.poison}
+          disabled={mirror || !w.poison}
           onClick={togglePoison}
-          className={cn('flex flex-col items-center gap-1 rounded-xl border-2 p-3 transition disabled:opacity-35', poisonMode ? 'border-mystic bg-mystic/25' : 'border-white/10 bg-black/30')}
+          className={cn('flex flex-col items-center gap-1 rounded-xl border-2 p-3 transition', !w.poison && 'opacity-35', draft.poison ? 'border-mystic bg-mystic/25' : 'border-white/10 bg-black/30')}
         >
           <Potion color="#a855f7" className="size-10" />
           <span className="font-display">使用毒药</span>
@@ -355,22 +368,29 @@ export function WitchPanel({ g, send }: { g: GameView; send: Send }) {
         </button>
       </div>
       <div className="text-center text-[11px] text-muted-foreground">{w.bothSameNight ? '本局解药与毒药可同晚使用' : '本局每晚只能使用一瓶药'}</div>
-      {poisonMode && (
+      {draft.poison && (
         <div className="space-y-1.5">
           <div className="text-xs text-purple-200">选择要毒杀的玩家：</div>
-          <PickGrid g={g} seats={aliveSeats(g)} selected={target} tone="mystic" onPick={(s) => setTarget(target === s ? null : s)} />
+          <PickGrid
+            g={g}
+            seats={aliveSeats(g)}
+            selected={draft.target}
+            tone="mystic"
+            disabled={mirror}
+            onPick={(s) => update({ ...draft, target: draft.target === s ? null : s })}
+          />
         </div>
       )}
       <div className="flex gap-2">
-        <Button variant="stone" size="lg2" className="flex-1" onClick={() => send({ type: 'witchAct', save: false, poison: null })}>
+        <Button variant="stone" size="lg2" className="flex-1" disabled={mirror} onClick={() => send?.({ type: 'witchAct', save: false, poison: null })}>
           不使用
         </Button>
         <Button
           variant="moss"
           size="lg2"
           className="flex-[2]"
-          disabled={!ready}
-          onClick={() => send({ type: 'witchAct', save, poison: poisonMode ? target : null })}
+          disabled={mirror || !ready}
+          onClick={() => send?.({ type: 'witchAct', save: draft.save, poison: draft.poison ? draft.target : null })}
         >
           <Check /> 确定
         </Button>
@@ -430,17 +450,25 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
 
 // ---------------- 猎人 ----------------
 
-export function HunterPanel({ g, send }: { g: GameView; send: Send }) {
-  const [target, setTarget] = useState<number | null>(null)
+export function HunterPanel({ g, send, mirror }: { g: GameView; send?: Send; mirror?: boolean }) {
+  const h = g.hunter!
+  const [local, setLocal] = useState<number | null>(null)
+  const target = mirror ? h.draft : local
+  const pick = (s: number) => {
+    if (mirror) return
+    const t = local === s ? null : s
+    setLocal(t)
+    send?.({ type: 'hunterDraft', target: t })
+  }
   return (
     <div className="space-y-3">
-      <p className="text-center text-sm text-amber-200">你倒下了，但你的猎枪还有一发子弹</p>
-      <PickGrid g={g} seats={aliveSeats(g).filter((s) => s !== g.mySeat)} selected={target} tone="blood" onPick={(s) => setTarget(target === s ? null : s)} />
+      <p className="text-center text-sm text-amber-200">{mirror ? `${h.seat + 1}号 是猎人，正在决定是否开枪` : '你倒下了，但你的猎枪还有一发子弹'}</p>
+      <PickGrid g={g} seats={aliveSeats(g).filter((s) => s !== h.seat)} selected={target} tone="blood" disabled={mirror} onPick={pick} />
       <div className="flex gap-2">
-        <Button variant="stone" size="lg2" className="flex-1" onClick={() => send({ type: 'hunterShoot', target: null })}>
+        <Button variant="stone" size="lg2" className="flex-1" disabled={mirror} onClick={() => send?.({ type: 'hunterShoot', target: null })}>
           不带人
         </Button>
-        <Button variant="blood" size="lg2" className="flex-[2]" disabled={target === null} onClick={() => send({ type: 'hunterShoot', target })}>
+        <Button variant="blood" size="lg2" className="flex-[2]" disabled={mirror || target === null} onClick={() => send?.({ type: 'hunterShoot', target })}>
           <Crosshair className="size-4" /> 开枪带走
         </Button>
       </div>
@@ -450,14 +478,16 @@ export function HunterPanel({ g, send }: { g: GameView; send: Send }) {
 
 // ---------------- 白痴 ----------------
 
-export function IdiotPanel({ send }: { send: Send }) {
+export function IdiotPanel({ send, mirror, seat }: { send?: Send; mirror?: boolean; seat?: number }) {
   return (
     <div className="space-y-3">
-      <p className="text-center text-sm text-pink-200">你被投票放逐了。作为白痴，你可以亮明身份免于出局，但此后不能投票，也不能被投票。</p>
-      <Button variant="gold" size="xl" className="w-full" onClick={() => send({ type: 'idiotDecide', reveal: true })}>
+      <p className="text-center text-sm text-pink-200">
+        {mirror ? `${(seat ?? 0) + 1}号 是白痴，正在决定是否亮明身份` : '你被投票放逐了。作为白痴，你可以亮明身份免于出局，但此后不能投票，也不能被投票。'}
+      </p>
+      <Button variant="gold" size="xl" className="w-full" disabled={mirror} onClick={() => send?.({ type: 'idiotDecide', reveal: true })}>
         亮明身份，免于出局
       </Button>
-      <Button variant="stone" size="lg2" className="w-full" onClick={() => send({ type: 'idiotDecide', reveal: false })}>
+      <Button variant="stone" size="lg2" className="w-full" disabled={mirror} onClick={() => send?.({ type: 'idiotDecide', reveal: false })}>
         不亮身份，直接出局
       </Button>
     </div>
