@@ -269,7 +269,18 @@ export function registerAdminRoutes(app: express.Express, rooms: Map<string, Roo
     res.json(
       listGameRecords().map((g) => {
         const meta = JSON.parse(g.meta) as ReplayMeta
-        return { id: g.id, code: g.code, status: g.status, winner: g.winner, startedAt: g.started_at, endedAt: g.ended_at, events: g.events, judge: meta.users[meta.judgeId] ?? '?', players: Object.keys(meta.users).length - 1 }
+        return {
+          id: g.id,
+          code: g.code,
+          round: g.round,
+          status: g.status,
+          winner: g.winner,
+          startedAt: g.started_at,
+          endedAt: g.ended_at,
+          events: g.events,
+          judge: meta.users[meta.judgeId] ?? '?',
+          players: Object.keys(meta.users).length - 1,
+        }
       }),
     )
   })
@@ -277,7 +288,7 @@ export function registerAdminRoutes(app: express.Express, rooms: Map<string, Roo
   app.get('/api/admin/games/:id', requireAdmin, (req, res) => {
     const g = getGameRecord(String(req.params.id))
     if (!g) return void res.status(404).json({ error: '对局不存在' })
-    res.json({ id: g.id, code: g.code, status: g.status, winner: g.winner, startedAt: g.started_at, endedAt: g.ended_at, events: getGameEvents(g.id) })
+    res.json({ id: g.id, code: g.code, round: g.round, status: g.status, winner: g.winner, startedAt: g.started_at, endedAt: g.ended_at, events: getGameEvents(g.id) })
   })
 
   app.get('/api/admin/games/:id/events/:seq', requireAdmin, (req, res) => {

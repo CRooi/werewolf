@@ -107,14 +107,18 @@ export function addGameEvent(gameId: string, e: Omit<EventRow, 'seq'> & { state:
   insertEvent.run(gameId, seq, e.ts, e.actor, e.text, e.phase, e.day, JSON.stringify(e.state))
 }
 
-export function listGameRecords(limit = 200): (GameRow & { events: number })[] {
-  return db
-    .prepare('SELECT g.*, (SELECT COUNT(*) FROM game_events e WHERE e.game_id = g.id) AS events FROM games g ORDER BY started_at DESC LIMIT ?')
-    .all(limit) as (GameRow & { events: number })[]
+/** round：该对局是所在房间的第几局（按发牌时间） */
+const GAME_WITH_ROUND = `SELECT g.*,
+  (SELECT COUNT(*) FROM game_events e WHERE e.game_id = g.id) AS events,
+  ROW_NUMBER() OVER (PARTITION BY g.code ORDER BY g.started_at) AS round
+  FROM games g`
+
+export function listGameRecords(limit = 300): (GameRow & { events: number; round: number })[] {
+  return db.prepare(`SELECT * FROM (${GAME_WITH_ROUND}) ORDER BY started_at DESC LIMIT ?`).all(limit) as (GameRow & { events: number; round: number })[]
 }
 
-export function getGameRecord(id: string): GameRow | null {
-  return (db.prepare('SELECT * FROM games WHERE id = ?').get(id) as GameRow | undefined) ?? null
+export function getGameRecord(id: string): (GameRow & { events: number; round: number }) | null {
+  return (db.prepare(`SELECT * FROM (${GAME_WITH_ROUND}) WHERE id = ?`).get(id) as (GameRow & { events: number; round: number }) | undefined) ?? null
 }
 
 export function getGameEvents(id: string): EventRow[] {

@@ -54,6 +54,8 @@ export interface AdminRoom {
 export interface AdminGame {
   id: string
   code: string
+  /** 该房间的第几局 */
+  round: number
   status: 'playing' | 'finished' | 'aborted'
   winner: 'wolf' | 'good' | null
   startedAt: number

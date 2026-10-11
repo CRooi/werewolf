@@ -207,35 +207,54 @@ function IdleInfo({ room, now }: { room: AdminRoom; now: number }) {
   )
 }
 
+const gameStatus = (g: Pick<AdminGame, 'status' | 'winner'>): [string, string] =>
+  g.status === 'playing'
+    ? ['进行中', 'bg-emerald-500/20 text-emerald-300']
+    : g.status === 'aborted'
+      ? ['已终止', 'bg-white/10 text-muted-foreground']
+      : [g.winner === 'wolf' ? '狼人胜利' : '好人胜利', g.winner === 'wolf' ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300']
+
+const duration = (g: Pick<AdminGame, 'startedAt' | 'endedAt'>) => (g.endedAt ? `用时 ${Math.max(1, Math.round((g.endedAt - g.startedAt) / 60000))} 分钟` : '进行中')
+
+/** 对局列表：每次发牌算一局，同一房间的多局分别列出 */
 function GameList({ games, onOpen }: { games: AdminGame[]; onOpen: (id: string) => void }) {
-  if (!games.length) return <div className="py-16 text-center text-muted-foreground">还没有对局记录</div>
-  const status = (g: AdminGame) =>
-    g.status === 'playing'
-      ? ['进行中', 'bg-emerald-500/20 text-emerald-300']
-      : g.status === 'aborted'
-        ? ['已终止', 'bg-white/10 text-muted-foreground']
-        : [g.winner === 'wolf' ? '狼人胜利' : '好人胜利', g.winner === 'wolf' ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300']
+  const [q, setQ] = useState('')
+  const shown = q ? games.filter((g) => g.code.includes(q)) : games
   return (
-    <div className="panel divide-y divide-white/5 overflow-hidden p-0">
-      {games.map((g) => {
-        const [label, cls] = status(g)
-        return (
-          <div key={g.id} className="flex items-center gap-4 px-4 py-3 text-sm">
-            <span className="w-16 font-display text-lg tracking-widest text-gold-soft">{g.code}</span>
-            <span className={cn('w-20 rounded-full px-2 py-0.5 text-center text-xs', cls)}>{label}</span>
-            <span className="text-muted-foreground">{fmtDateTime(g.startedAt)}</span>
-            <span className="text-muted-foreground">
-              {g.endedAt ? `用时 ${Math.max(1, Math.round((g.endedAt - g.startedAt) / 60000))} 分钟` : '—'}
-            </span>
-            <span className="text-muted-foreground">
-              法官 {g.judge} · {g.players} 人 · {g.events} 个事件
-            </span>
-            <Button variant="stone" size="sm" className="ml-auto" onClick={() => onOpen(g.id)}>
-              <History /> 回放
-            </Button>
-          </div>
-        )
-      })}
+    <div className="space-y-3">
+      <Input
+        value={q}
+        inputMode="numeric"
+        placeholder="按房间号筛选"
+        onChange={(e) => setQ(e.target.value.replace(/\D/g, '').slice(0, 4))}
+        className="h-9 max-w-xs bg-black/30"
+      />
+      {shown.length === 0 ? (
+        <div className="py-16 text-center text-muted-foreground">{games.length ? '没有匹配的对局' : '还没有对局记录'}</div>
+      ) : (
+        <div className="panel divide-y divide-white/5 overflow-hidden p-0">
+          {shown.map((g) => {
+            const [label, cls] = gameStatus(g)
+            return (
+              <div key={g.id} className="flex items-center gap-4 px-4 py-3 text-sm">
+                <div className="w-36 shrink-0">
+                  <div className="font-display text-lg text-gold-soft">第 {g.round} 局</div>
+                  <div className="text-xs text-muted-foreground">房间 {g.code}</div>
+                </div>
+                <span className={cn('w-20 shrink-0 rounded-full px-2 py-0.5 text-center text-xs', cls)}>{label}</span>
+                <span className="text-muted-foreground">{fmtDateTime(g.startedAt)} 发牌</span>
+                <span className="text-muted-foreground">{duration(g)}</span>
+                <span className="text-muted-foreground">
+                  法官 {g.judge} · {g.players} 人 · {g.events} 个事件
+                </span>
+                <Button variant="stone" size="sm" className="ml-auto" onClick={() => onOpen(g.id)}>
+                  <History /> 回放
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -299,6 +318,7 @@ function LiveView({ code, token, onAuthFail }: { code: string; token: string; on
 interface GameDetail {
   id: string
   code: string
+  round: number
   status: AdminGame['status']
   winner: AdminGame['winner']
   startedAt: number
@@ -399,8 +419,18 @@ function Replay({ id, onError }: { id: string; onError: (e: unknown) => void }) 
     </div>
   )
 
+  const [statusLabel, statusCls] = gameStatus(detail)
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex items-center gap-3 text-sm">
+        <span className="font-display text-xl text-gold-soft">
+          房间 {detail.code} · 第 {detail.round} 局
+        </span>
+        <span className={cn('rounded-full px-2 py-0.5 text-xs', statusCls)}>{statusLabel}</span>
+        <span className="text-muted-foreground">
+          {fmtDateTime(detail.startedAt)} 发牌 · {duration(detail)} · {events.length} 个事件
+        </span>
+      </div>
       <div className="min-h-0 flex-1">{view ? <AdminBoard state={view} extraTab={{ label: '时间轴', content: timeline }} /> : <div className="py-20 text-center text-gold-soft">加载局面…</div>}</div>
 
       {/* 时间轴控制条 */}
