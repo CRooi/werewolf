@@ -56,6 +56,12 @@ export interface SwapRequest {
 interface NightState {
   wolfOpened: number[]
   wolfSel: Record<number, WolfChoice>
+  /** 已锁定选择的狼人 */
+  wolfLocked: number[]
+  /** 全体锁定且一致后，等待最终确认的对象 */
+  wolfPending: WolfChoice
+  wolfRound: number
+  wolfNote: string | null
   wolfConfirmed: boolean
   wolfTarget: WolfChoice
   seerDone: boolean
@@ -153,6 +159,10 @@ function freshNight(): NightState {
   return {
     wolfOpened: [],
     wolfSel: {},
+    wolfLocked: [],
+    wolfPending: null,
+    wolfRound: 1,
+    wolfNote: null,
     wolfConfirmed: false,
     wolfTarget: null,
     seerDone: false,
@@ -218,6 +228,10 @@ export class Room {
       d.game.idiot ??= null
       d.game.idiotRevealed ??= null
       d.game.deathDay ??= d.game.roles.map(() => null)
+      d.game.night.wolfLocked ??= []
+      d.game.night.wolfPending ??= null
+      d.game.night.wolfRound ??= 1
+      d.game.night.wolfNote ??= null
     }
   }
 
@@ -572,7 +586,8 @@ export class Room {
       case 'wolfSelect': {
         this.expect('wolf_pick')
         if (myRole !== 'werewolf' || !meAlive) fail('你不能参与猎杀')
-        if (g.night.wolfConfirmed) fail('已经确认')
+        if (g.night.wolfConfirmed || g.night.wolfPending !== null) fail('已经确认')
+        if (g.night.wolfLocked.includes(mySeat)) fail('你已经确定，请先取消再修改')
         const c = msg.choice
         if (c !== null && c !== 'none' && !(typeof c === 'number' && g.alive[c])) fail('只能选择存活玩家')
         g.night.wolfSel[mySeat] = c
@@ -588,15 +603,47 @@ export class Room {
         return
       }
       case 'wolfConfirm': {
+        // 锁定自己的选择；全体锁定后意见一致则等待最终确认，否则作废重选
         this.expect('wolf_pick')
         if (myRole !== 'werewolf' || !meAlive) fail('你不能参与猎杀')
-        if (g.night.wolfConfirmed) return
-        const sels = this.aliveWolves().map((s) => g.night.wolfSel[s] ?? null)
-        const first = sels[0]
-        if (first === null || first === undefined || sels.some((s) => s !== first)) fail('请统一意见。')
-        g.night.wolfConfirmed = true
-        g.night.wolfTarget = first!
-        this.log(first === 'none' ? '狼人选择今晚不猎杀' : `狼人猎杀 ${this.label(first as number)}`)
+        const n = g.night
+        if (n.wolfConfirmed || n.wolfPending !== null || n.wolfLocked.includes(mySeat)) return
+        if ((n.wolfSel[mySeat] ?? null) === null) fail('请先选择猎杀对象')
+        n.wolfLocked.push(mySeat)
+        const wolves = this.aliveWolves()
+        if (!wolves.every((s) => n.wolfLocked.includes(s))) return
+        const sels = wolves.map((s) => n.wolfSel[s]!)
+        if (sels.every((c) => c === sels[0])) {
+          n.wolfPending = sels[0]!
+          n.wolfNote = null
+        } else {
+          const detail = wolves.map((s) => `${s + 1}号→${n.wolfSel[s] === 'none' ? '不猎杀' : `${(n.wolfSel[s] as number) + 1}号`}`).join('，')
+          this.restartWolfPick(`意见不统一（${detail}），请重新选择`)
+        }
+        return
+      }
+      case 'wolfCancel': {
+        this.expect('wolf_pick')
+        if (myRole !== 'werewolf' || !meAlive) fail('你不能参与猎杀')
+        const n = g.night
+        if (n.wolfConfirmed) fail('已经确认猎杀')
+        if (n.wolfPending !== null) {
+          const t = n.wolfPending
+          this.restartWolfPick(`${mySeat + 1}号 取消了${t === 'none' ? '「今晚不猎杀」' : `猎杀 ${(t as number) + 1}号`}，请重新选择`)
+          return
+        }
+        n.wolfLocked = n.wolfLocked.filter((s) => s !== mySeat)
+        return
+      }
+      case 'wolfFinal': {
+        this.expect('wolf_pick')
+        if (myRole !== 'werewolf' || !meAlive) fail('你不能参与猎杀')
+        const n = g.night
+        if (n.wolfConfirmed) return
+        if (n.wolfPending === null) fail('狼人还没有统一意见')
+        n.wolfConfirmed = true
+        n.wolfTarget = n.wolfPending
+        this.log(n.wolfTarget === 'none' ? '狼人选择今晚不猎杀' : `狼人猎杀 ${this.label(n.wolfTarget as number)}`)
         return
       }
       case 'seerSelect': {
@@ -668,6 +715,14 @@ export class Room {
         if (!b || b.choice === null) fail('请先选择')
         b!.confirmed = true
         if (v.voters.every((s) => v.ballots[s]?.confirmed)) this.tallyVote()
+        return
+      }
+      case 'voteCancel': {
+        // 所有人投完之前可以撤回；全部投完会立即唱票，之后就不能再改
+        this.expect('voting')
+        const b = g.vote!.ballots[mySeat]
+        if (!b?.confirmed) fail('你还没有投票')
+        b.confirmed = false
         return
       }
       case 'idiotDecide': {
@@ -876,6 +931,17 @@ export class Room {
       g.hunter = { seat: hunterSeat, context: 'night', done: false, target: null }
       g.phase = 'hunter'
     }
+  }
+
+  /** 狼人本轮选择作废，所有狼人重新选择（候选仍是全部存活玩家） */
+  private restartWolfPick(note: string) {
+    const n = this.g().night
+    n.wolfSel = {}
+    n.wolfLocked = []
+    n.wolfPending = null
+    n.wolfRound += 1
+    n.wolfNote = note
+    this.log(`狼人${note}`)
   }
 
   private openVote(round: number, candidates: number[] | null) {
@@ -1096,6 +1162,10 @@ export class Room {
             aliveSeats: wolfSeats.filter((s) => g.alive[s]),
             opened: n.wolfOpened,
             selections: n.wolfSel,
+            locked: n.wolfLocked,
+            pending: n.wolfPending,
+            round: n.wolfRound,
+            note: n.wolfNote,
             confirmed: n.wolfConfirmed,
             target: n.wolfTarget,
             chat: g.wolfChat,

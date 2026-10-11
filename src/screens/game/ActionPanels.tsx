@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Ban, Check, Send } from 'lucide-react'
+import { Ban, Check, Send, Undo2 } from 'lucide-react'
 import { JUDGE_CHAT_SEAT, SPECTATOR_CHAT_SEAT, type ChatMessage, type ClientMessage, type GameView, type WitchDraft } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Crosshair, Paw, Potion } from '@/components/art/icons'
+import { ConfirmDialog, type ConfirmRequest } from '@/components/game/ConfirmDialog'
 import { avatarHue, SeatChip } from '@/components/game/PlayerToken'
 import { seatName } from './helpers'
 
@@ -73,20 +74,35 @@ const aliveSeats = (g: GameView) => g.players.filter((p) => p.alive).map((p) => 
 // ---------------- 狼人 ----------------
 
 /**
- * 狼人选人面板。mirror 为上帝视角镜像：只读展示狼人看到的界面；
- * canChat 控制镜像模式下能否在狼人频道发言（法官夜间可发言）。
+ * 狼人选人面板：每只狼选好后点「确定」锁定；全部锁定后意见一致则弹窗做最终确认，
+ * 不一致或在弹窗里取消，则所有狼人重新选择。
+ * mirror 为上帝视角镜像：只读展示狼人看到的界面；canChat 控制镜像模式下能否在狼人频道发言（法官夜间可发言）。
  */
 export function WolfPanel({ g, send, mirror, canChat }: { g: GameView; send?: Send; mirror?: boolean; canChat?: boolean }) {
   const w = g.wolf!
   const me = mirror ? null : g.mySeat
   const mine = me !== null ? (w.selections[me] ?? null) : null
+  const myLocked = me !== null && w.locked.includes(me)
+  const pending = w.pending
   const choices = w.aliveSeats.map((s) => w.selections[s] ?? null)
   const unanimous = choices.length > 0 && choices[0] !== null && choices.every((c) => c === choices[0])
+  const lockedCount = w.aliveSeats.filter((s) => w.locked.includes(s)).length
   const pickers = (target: number | 'none') => w.aliveSeats.filter((s) => w.selections[s] === target)
-  const pick = (c: number | 'none') => !mirror && !w.confirmed && send?.({ type: 'wolfSelect', choice: mine === c ? null : c })
+  const frozen = mirror || myLocked || pending !== null
+  const pick = (c: number | 'none') => !frozen && send?.({ type: 'wolfSelect', choice: mine === c ? null : c })
   // 镜像时高亮意见统一的目标
   const highlight = mirror ? (unanimous && typeof choices[0] === 'number' ? choices[0] : null) : typeof mine === 'number' ? mine : null
   const noneActive = mirror ? unanimous && choices[0] === 'none' : mine === 'none'
+  const pendingText = pending === 'none' ? '今晚不进行猎杀' : pending !== null ? `猎杀 ${seatName(g, pending)}` : ''
+  const finalAsk: ConfirmRequest | null =
+    !mirror && pending !== null && !w.confirmed
+      ? {
+          title: pending === 'none' ? '确定今晚不猎杀吗？' : `确定要刀 ${seatName(g, pending)} 吗？`,
+          description: '狼人意见一致。确定后提交给法官；取消则所有狼人重新选择。',
+          tone: 'blood',
+          onConfirm: () => send?.({ type: 'wolfFinal' }),
+        }
+      : null
 
   return (
     <div className="space-y-3">
@@ -97,19 +113,27 @@ export function WolfPanel({ g, send, mirror, canChat }: { g: GameView; send?: Se
         </div>
       ) : (
         <>
+          {pending !== null ? (
+            <div className="rounded-xl border border-blood/50 bg-blood/15 p-3 text-center">
+              <div className="font-display text-lg">意见一致：{pendingText}</div>
+              <div className="mt-1 text-xs text-muted-foreground">等待狼人最终确认，取消则全部重新选择</div>
+            </div>
+          ) : (
+            w.note && <div className="rounded-lg bg-amber-500/15 px-3 py-1.5 text-center text-xs text-amber-200">第 {w.round} 轮选择 · {w.note}</div>
+          )}
           <PickGrid
             g={g}
             seats={aliveSeats(g)}
             selected={highlight}
             tone="blood"
-            disabled={mirror}
+            disabled={frozen}
             onPick={pick}
             tag={(s) => w.seats.includes(s) && <span className="absolute -bottom-1 -right-2 rounded bg-blood px-1 text-[9px] text-white">狼</span>}
-            marks={(s) => pickers(s).map((p) => <PawChip key={p} seat={p} />)}
+            marks={(s) => pickers(s).map((p) => <PawChip key={p} seat={p} locked={w.locked.includes(p)} />)}
           />
           <button
             type="button"
-            disabled={mirror}
+            disabled={frozen}
             onClick={() => pick('none')}
             className={cn(
               'flex w-full items-center justify-between rounded-xl border-2 px-3 py-2 text-sm transition',
@@ -119,31 +143,49 @@ export function WolfPanel({ g, send, mirror, canChat }: { g: GameView; send?: Se
             <span className="flex items-center gap-2">
               <Ban className="size-4" /> 今晚不进行猎杀
             </span>
-            <span className="flex gap-0.5">{pickers('none').map((p) => <PawChip key={p} seat={p} />)}</span>
+            <span className="flex gap-0.5">{pickers('none').map((p) => <PawChip key={p} seat={p} locked={w.locked.includes(p)} />)}</span>
           </button>
           <div className="flex items-center gap-2">
-            <div className={cn('flex-1 text-xs', unanimous ? 'text-emerald-300' : 'text-amber-300')}>
-              {unanimous ? '意见已统一' : '请统一意见。'}
-              <span className="ml-1 text-muted-foreground">
-                ({choices.filter((c) => c !== null).length}/{w.aliveSeats.length} 已选择)
+            <div className="flex-1 text-xs text-muted-foreground">
+              <span className={cn(unanimous ? 'text-emerald-300' : 'text-amber-300')}>{unanimous ? '意见已统一' : '意见未统一'}</span>
+              <span className="ml-1">
+                · 已确定 {lockedCount}/{w.aliveSeats.length}
               </span>
             </div>
-            <Button variant="blood" size="lg2" disabled={mirror || !unanimous} onClick={() => send?.({ type: 'wolfConfirm' })}>
-              <Crosshair className="size-4" /> 确定
-            </Button>
+            {myLocked && pending === null ? (
+              <Button variant="stone" size="lg2" onClick={() => send?.({ type: 'wolfCancel' })}>
+                <Undo2 className="size-4" /> 取消确定
+              </Button>
+            ) : (
+              <Button variant="blood" size="lg2" disabled={frozen || mine === null} onClick={() => send?.({ type: 'wolfConfirm' })}>
+                <Crosshair className="size-4" /> 确定
+              </Button>
+            )}
           </div>
+          {!mirror && (
+            <div className="text-center text-[11px] text-muted-foreground">
+              {myLocked && pending === null ? '已确定，等待同伴…所有狼人确定后才会揭晓结果' : '所有狼人都确定后，意见一致才会提交，否则重新选择'}
+            </div>
+          )}
         </>
       )}
       <WolfChat g={g} send={send} readOnly={mirror && !canChat} />
+      <ConfirmDialog request={finalAsk} onClose={() => {}} onCancel={() => send?.({ type: 'wolfCancel' })} />
     </div>
   )
 }
 
-function PawChip({ seat }: { seat: number }) {
+function PawChip({ seat, locked }: { seat: number; locked?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-0.5 rounded-full bg-blood/80 px-1 text-[10px] font-bold text-white">
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-full px-1 text-[10px] font-bold text-white',
+        locked ? 'bg-blood ring-1 ring-red-200/80' : 'border border-dashed border-blood/80 bg-blood/30',
+      )}
+    >
       <Paw className="size-2.5" />
       {seat + 1}
+      {locked && <Check className="size-2.5" />}
     </span>
   )
 }
@@ -258,6 +300,7 @@ export function WolfChat({ g, send, readOnly }: { g: GameView; send?: Send; read
 
 export function SeerPanel({ g, send, mirror }: { g: GameView; send?: Send; mirror?: boolean }) {
   const s = g.seer!
+  const [ask, setAsk] = useState<ConfirmRequest | null>(null)
   const history = Object.fromEntries(s.history.map((h) => [h.seat, h.result]))
   if (g.phase === 'seer_result' && s.result && s.selection !== null) {
     const good = s.result === 'good'
@@ -286,10 +329,19 @@ export function SeerPanel({ g, send, mirror }: { g: GameView; send?: Send; mirro
       {s.confirmed ? (
         <div className="text-center text-sm text-muted-foreground">已选择 {seatName(g, s.selection!)}，等待法官验明身份…</div>
       ) : (
-        <Button variant="mystic" size="xl" className="w-full" disabled={mirror || s.selection === null} onClick={() => send?.({ type: 'seerConfirm' })}>
+        <Button
+          variant="mystic"
+          size="xl"
+          className="w-full"
+          disabled={mirror || s.selection === null}
+          onClick={() =>
+            setAsk({ title: `确定查验 ${seatName(g, s.selection!)} 吗？`, description: '确定后不能更换查验对象。', tone: 'mystic', onConfirm: () => send?.({ type: 'seerConfirm' }) })
+          }
+        >
           <Check /> {mirror ? (s.selection === null ? '预言家正在选择…' : `预言家正在看 ${seatName(g, s.selection)}`) : '确定查验'}
         </Button>
       )}
+      <ConfirmDialog request={ask} onClose={() => setAsk(null)} />
     </div>
   )
 }
@@ -299,6 +351,7 @@ export function SeerPanel({ g, send, mirror }: { g: GameView; send?: Send; mirro
 export function WitchPanel({ g, send, mirror }: { g: GameView; send?: Send; mirror?: boolean }) {
   const w = g.witch!
   const [local, setLocal] = useState<WitchDraft>({ save: false, poison: false, target: null })
+  const [ask, setAsk] = useState<ConfirmRequest | null>(null)
   // 镜像时展示女巫的实时选择；女巫本人改动时同步到服务端
   const draft = mirror ? w.draft : local
   const update = (d: WitchDraft) => {
@@ -324,15 +377,39 @@ export function WitchPanel({ g, send, mirror }: { g: GameView; send?: Send; mirr
   const showVictim = w.canSeeVictim
   const selfBlocked = victim === w.seat && !w.selfSave
   const canSave = w.antidote && showVictim && victim !== null && !selfBlocked
+  const act = (save: boolean, poison: number | null) => send?.({ type: 'witchAct', save, poison })
+  // 解药：弹窗确认后即生效；若本局允许同晚用两瓶药且毒药还在，则记下选择继续决定毒药
   const toggleSave = () => {
     if (!canSave) return
-    const save = !draft.save
-    update(save && !w.bothSameNight ? { save, poison: false, target: null } : { ...draft, save })
+    if (draft.save) return update({ ...draft, save: false })
+    const keepGoing = w.bothSameNight && w.poison
+    setAsk({
+      title: '确定要使用解药吗？',
+      description: `救下 ${seatName(g, victim!)}。${keepGoing ? '之后还可以决定是否使用毒药。' : '确定后今晚的行动结束。'}`,
+      tone: 'moss',
+      onConfirm: () => (keepGoing ? update({ ...draft, save: true }) : act(true, null)),
+    })
   }
+  // 毒药：先确认要使用，再选人，选好后点确定还有一次确认
   const togglePoison = () => {
     if (!w.poison) return
-    const poison = !draft.poison
-    update({ save: poison && !w.bothSameNight ? false : draft.save, poison, target: poison ? draft.target : null })
+    if (draft.poison) return update({ ...draft, poison: false, target: null })
+    setAsk({
+      title: '确定要使用毒药吗？',
+      description: '确定后选择要毒杀的玩家。',
+      tone: 'mystic',
+      onConfirm: () => update({ save: w.bothSameNight ? draft.save : false, poison: true, target: null }),
+    })
+  }
+  const submit = () => {
+    const target = draft.poison ? draft.target : null
+    if (target === null) return act(draft.save, null)
+    setAsk({
+      title: `确定要毒杀 ${seatName(g, target)} 吗？`,
+      description: draft.save ? `同时使用解药救下 ${seatName(g, victim!)}。` : '毒药只有一瓶，确定后无法撤回。',
+      tone: 'mystic',
+      onConfirm: () => act(draft.save, target),
+    })
   }
   const ready = draft.save || (draft.poison && draft.target !== null)
 
@@ -382,7 +459,7 @@ export function WitchPanel({ g, send, mirror }: { g: GameView; send?: Send; mirr
         </div>
       )}
       <div className="flex gap-2">
-        <Button variant="stone" size="lg2" className="flex-1" disabled={mirror} onClick={() => send?.({ type: 'witchAct', save: false, poison: null })}>
+        <Button variant="stone" size="lg2" className="flex-1" disabled={mirror} onClick={() => act(false, null)}>
           不使用
         </Button>
         <Button
@@ -390,11 +467,12 @@ export function WitchPanel({ g, send, mirror }: { g: GameView; send?: Send; mirr
           size="lg2"
           className="flex-[2]"
           disabled={mirror || !ready}
-          onClick={() => send?.({ type: 'witchAct', save: draft.save, poison: draft.poison ? draft.target : null })}
+          onClick={submit}
         >
           <Check /> 确定
         </Button>
       </div>
+      <ConfirmDialog request={ask} onClose={() => setAsk(null)} />
     </div>
   )
 }
@@ -412,6 +490,16 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
   const chips = (c: number | 'abstain') => votersFor(c).map((s) => <SeatChip key={s} seat={s} variant={v.ballots[s]!.confirmed ? 'solid' : 'dashed'} />)
   const pick = (c: number | 'abstain') => !locked && send?.({ type: 'voteSelect', choice: my?.choice === c ? null : c })
   const confirmed = v.voters.filter((s) => v.ballots[s]?.confirmed).length
+  const [ask, setAsk] = useState<ConfirmRequest | null>(null)
+  const confirmVote = () => {
+    const c = my?.choice
+    if (c === null || c === undefined) return
+    setAsk({
+      title: c === 'abstain' ? '确定弃票吗？' : `确定投给 ${seatName(g, c)} 吗？`,
+      description: '所有人投完票之前，你还可以撤回重新选择。',
+      onConfirm: () => send?.({ type: 'voteConfirm' }),
+    })
+  }
 
   return (
     <div className="space-y-3">
@@ -438,12 +526,20 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
       </div>
       {canVote &&
         (my?.confirmed ? (
-          <div className="text-center text-sm text-muted-foreground">已投票，等待其他玩家…</div>
+          <div className="space-y-2">
+            <div className="text-center text-sm text-muted-foreground">
+              已{my.choice === 'abstain' ? '弃票' : `投给 ${seatName(g, my.choice as number)}`}，等待其他玩家…所有人投完前可以撤回
+            </div>
+            <Button variant="stone" size="lg2" className="w-full" onClick={() => send?.({ type: 'voteCancel' })}>
+              <Undo2 /> 撤回投票，重新选择
+            </Button>
+          </div>
         ) : (
-          <Button variant="gold" size="xl" className="w-full" disabled={!my || my.choice === null} onClick={() => send?.({ type: 'voteConfirm' })}>
+          <Button variant="gold" size="xl" className="w-full" disabled={!my || my.choice === null} onClick={confirmVote}>
             <Check /> 确认投票
           </Button>
         ))}
+      <ConfirmDialog request={ask} onClose={() => setAsk(null)} />
     </div>
   )
 }

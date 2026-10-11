@@ -122,6 +122,14 @@ export interface WolfView {
   aliveSeats: number[]
   opened: number[]
   selections: Record<number, WolfChoice>
+  /** 已点「确定」锁定选择的狼人座位 */
+  locked: number[]
+  /** 所有狼人都锁定且意见一致后，等待最终确认的猎杀对象 */
+  pending: WolfChoice
+  /** 第几轮选择（意见不统一或取消后加一） */
+  round: number
+  /** 上一轮作废的原因，例如意见不统一 */
+  note: string | null
   confirmed: boolean
   target: WolfChoice
   chat: ChatMessage[]
@@ -300,12 +308,19 @@ export type ClientMessage =
   | { type: 'wolfSelect'; choice: WolfChoice }
   | { type: 'wolfChat'; text: string }
   | { type: 'ghostChat'; text: string }
+  /** 狼人锁定自己的选择 */
   | { type: 'wolfConfirm' }
+  /** 狼人撤回自己的锁定；最终确认弹窗里点取消则全体重选 */
+  | { type: 'wolfCancel' }
+  /** 意见一致后最终确认猎杀 */
+  | { type: 'wolfFinal' }
   | { type: 'seerSelect'; seat: number }
   | { type: 'seerConfirm' }
   | { type: 'witchAct'; save: boolean; poison: number | null }
   | { type: 'voteSelect'; choice: VoteChoice }
   | { type: 'voteConfirm' }
+  /** 所有人投完之前撤回自己的投票 */
+  | { type: 'voteCancel' }
   | { type: 'hunterShoot'; target: number | null }
   | { type: 'hunterDraft'; target: number | null }
   | { type: 'witchDraft'; save: boolean; poison: boolean; target: number | null }

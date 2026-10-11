@@ -30,12 +30,19 @@ function night(s: ReturnType<typeof setup>, kill: number | 'none', opts: { save?
   J('wolfPick')
   as(wolves[0]!, { type: 'wolfSelect', choice: kill })
   if (wolves.length > 1) {
+    // 意见不统一：全体确定后作废，重新选择
     as(wolves[1]!, { type: 'wolfSelect', choice: kill === 'none' ? 0 : 'none' })
-    expect(() => as(wolves[0]!, { type: 'wolfConfirm' })).toThrow('请统一意见。')
-    as(wolves[1]!, { type: 'wolfSelect', choice: kill })
+    for (const w of wolves) as(w, { type: 'wolfConfirm' })
+    expect(g().night.wolfPending).toBeNull()
+    expect(g().night.wolfRound).toBe(2)
+    expect(g().night.wolfNote).toContain('意见不统一')
+    for (const w of wolves) as(w, { type: 'wolfSelect', choice: kill })
   }
   as(wolves[0]!, { type: 'wolfChat', text: '刀他' })
-  as(wolves[0]!, { type: 'wolfConfirm' })
+  expect(() => as(wolves[0]!, { type: 'wolfFinal' })).toThrow('还没有统一意见')
+  for (const w of wolves) as(w, { type: 'wolfConfirm' })
+  expect(g().night.wolfPending).toBe(kill)
+  as(wolves[0]!, { type: 'wolfFinal' })
   J('wolfClose')
   // 神职出局后法官仍完整走流程，只是不需要玩家操作
   const seer = g().roles.indexOf('seer')
@@ -159,7 +166,7 @@ test('judge sees pending death before dawn, others do not', () => {
   s.fixRoles(ROLES)
   const { J, as, room } = s
   J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
-  as(0, { type: 'wolfSelect', choice: 5 }); as(1, { type: 'wolfSelect', choice: 5 }); as(0, { type: 'wolfConfirm' })
+  as(0, { type: 'wolfSelect', choice: 5 }); as(1, { type: 'wolfSelect', choice: 5 }); as(0, { type: 'wolfConfirm' }); as(1, { type: 'wolfConfirm' }); as(0, { type: 'wolfFinal' })
   expect(room.view(s.judge.id, () => true).game!.players[5]!.pendingDeath).toBe(true)
   expect(room.view(room.d.game!.seats[1]!, () => true).game!.players[5]!.pendingDeath).toBeUndefined()
   expect(room.view(room.d.game!.seats[1]!, () => true).game!.players[0]!.role).toBe('werewolf')
@@ -180,7 +187,7 @@ test('spectator view only exposes public info', () => {
   s.fixRoles(ROLES)
   const { J, as, room } = s
   J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
-  as(0, { type: 'wolfSelect', choice: 5 }); as(1, { type: 'wolfSelect', choice: 5 }); as(0, { type: 'wolfChat', text: 'secret' }); as(0, { type: 'wolfConfirm' })
+  as(0, { type: 'wolfSelect', choice: 5 }); as(1, { type: 'wolfSelect', choice: 5 }); as(0, { type: 'wolfChat', text: 'secret' }); as(0, { type: 'wolfConfirm' }); as(1, { type: 'wolfConfirm' }); as(0, { type: 'wolfFinal' })
   let v = room.spectatorView(() => true)
   expect(v.me.isJudge).toBe(false)
   expect(v.me.seat).toBeNull()
@@ -240,7 +247,7 @@ test('dead players can watch wolf / seer / witch actions; alive players cannot',
   expect(alive.seer).toBeNull()
   expect(alive.witch).toBeNull()
   // 观战者能看到女巫当晚的刀口
-  as(1, { type: 'wolfSelect', choice: 6 }); as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  as(1, { type: 'wolfSelect', choice: 6 }); as(0, { type: 'wolfConfirm' }); as(1, { type: 'wolfConfirm' }); as(0, { type: 'wolfFinal' }); J('wolfClose')
   J('witchWake'); as(3, { type: 'openEyes' }); J('witchInform')
   expect(room.view(g.seats[5]!, () => true).game!.witch!.victim).toBe(6)
   expect(room.view(g.seats[5]!, () => true).game!.players[6]!.pendingDeath).toBe(true)
@@ -385,7 +392,7 @@ test('dead seer / witch: judge walks the full flow as if they were alive', () =>
   g.alive[2] = false // 预言家
   g.alive[3] = false // 女巫
   J('nightStart'); J('wolfWake'); s.as(0, { type: 'openEyes' }); s.as(1, { type: 'openEyes' }); J('wolfPick')
-  s.as(0, { type: 'wolfSelect', choice: 5 }); s.as(1, { type: 'wolfSelect', choice: 5 }); s.as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  s.as(0, { type: 'wolfSelect', choice: 5 }); s.as(1, { type: 'wolfSelect', choice: 5 }); s.as(0, { type: 'wolfConfirm' }); s.as(1, { type: 'wolfConfirm' }); s.as(0, { type: 'wolfFinal' }); J('wolfClose')
   const phases: string[] = []
   for (const step of ['seerWake', 'seerPick', 'seerReveal', 'seerClose', 'witchWake', 'witchInform', 'witchClose'] as const) {
     // 不能跳步
@@ -426,7 +433,7 @@ test('players dead on day 1 cannot watch until night 2; later deaths watch immed
   expect(v().peekRoles).not.toBeNull()
   // 第二天出局的玩家公布后立即可观战
   J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
-  as(0, { type: 'wolfSelect', choice: 4 }); as(1, { type: 'wolfSelect', choice: 4 }); as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  as(0, { type: 'wolfSelect', choice: 4 }); as(1, { type: 'wolfSelect', choice: 4 }); as(0, { type: 'wolfConfirm' }); as(1, { type: 'wolfConfirm' }); as(0, { type: 'wolfFinal' }); J('wolfClose')
   for (const step of ['seerWake'] as const) J(step)
   as(2, { type: 'openEyes' }); J('seerPick'); as(2, { type: 'seerSelect', seat: 1 }); as(2, { type: 'seerConfirm' }); J('seerReveal'); J('seerClose')
   J('witchWake'); J('witchInform'); J('witchClose') // 女巫已出局，空过
@@ -443,7 +450,7 @@ test('witch / hunter drafts are mirrored to god view only', () => {
   const { J, as, room, judge } = s
   const g = room.d.game!
   J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
-  as(0, { type: 'wolfSelect', choice: 4 }); as(1, { type: 'wolfSelect', choice: 4 }); as(0, { type: 'wolfConfirm' }); J('wolfClose')
+  as(0, { type: 'wolfSelect', choice: 4 }); as(1, { type: 'wolfSelect', choice: 4 }); as(0, { type: 'wolfConfirm' }); as(1, { type: 'wolfConfirm' }); as(0, { type: 'wolfFinal' }); J('wolfClose')
   J('seerWake'); as(2, { type: 'openEyes' }); J('seerPick'); as(2, { type: 'seerSelect', seat: 0 }); as(2, { type: 'seerConfirm' }); J('seerReveal'); J('seerClose')
   J('witchWake'); as(3, { type: 'openEyes' }); J('witchInform')
   expect(() => as(5, { type: 'witchDraft', save: false, poison: true, target: 1 })).toThrow()
@@ -469,4 +476,54 @@ test('extend: any member (incl. spectators) can extend; idle countdown in room v
   expect(s.room.handle(spec.id, { type: 'extend' })).toEqual({})
   s.room.touch()
   expect(s.room.view(s.judge.id, () => true).room.idleRemainingMs).toBeGreaterThan(29 * 60_000)
+})
+
+test('wolves: lock, unlock, cancel final confirm restarts the pick', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  const { J, as, room } = s
+  const n = () => room.d.game!.night
+  J('nightStart'); J('wolfWake'); as(0, { type: 'openEyes' }); as(1, { type: 'openEyes' }); J('wolfPick')
+  expect(() => as(0, { type: 'wolfConfirm' })).toThrow('请先选择')
+  as(0, { type: 'wolfSelect', choice: 5 })
+  as(0, { type: 'wolfConfirm' })
+  // 锁定后不能改，撤回后可以改
+  expect(() => as(0, { type: 'wolfSelect', choice: 6 })).toThrow('请先取消')
+  as(0, { type: 'wolfCancel' })
+  expect(n().wolfLocked).toEqual([])
+  as(0, { type: 'wolfSelect', choice: 6 }); as(0, { type: 'wolfConfirm' })
+  as(1, { type: 'wolfSelect', choice: 6 }); as(1, { type: 'wolfConfirm' })
+  expect(n().wolfPending).toBe(6)
+  expect(() => J('wolfClose')).toThrow()
+  // 最终确认弹窗里取消：所有人重新选
+  as(1, { type: 'wolfCancel' })
+  expect(n().wolfPending).toBeNull()
+  expect(n().wolfSel).toEqual({})
+  expect(n().wolfLocked).toEqual([])
+  expect(n().wolfNote).toContain('2号 取消了猎杀 7号')
+  as(0, { type: 'wolfSelect', choice: 4 }); as(1, { type: 'wolfSelect', choice: 4 })
+  as(0, { type: 'wolfConfirm' }); as(1, { type: 'wolfConfirm' }); as(1, { type: 'wolfFinal' })
+  expect(n().wolfTarget).toBe(4)
+  expect(() => as(0, { type: 'wolfCancel' })).toThrow('已经确认猎杀')
+  J('wolfClose')
+})
+
+test('vote: ballots can be withdrawn until everyone has voted', () => {
+  const s = setup()
+  s.fixRoles(ROLES)
+  night(s, 'none')
+  s.J('voteStart')
+  const g = s.room.d.game!
+  expect(() => s.as(0, { type: 'voteCancel' })).toThrow('还没有投票')
+  s.as(0, { type: 'voteSelect', choice: 5 }); s.as(0, { type: 'voteConfirm' })
+  expect(() => s.as(0, { type: 'voteSelect', choice: 6 })).toThrow('已经确认投票')
+  s.as(0, { type: 'voteCancel' })
+  s.as(0, { type: 'voteSelect', choice: 6 }); s.as(0, { type: 'voteConfirm' })
+  for (const seat of [1, 2, 3, 4, 5, 6]) {
+    s.as(seat, { type: 'voteSelect', choice: 'abstain' })
+    s.as(seat, { type: 'voteConfirm' })
+  }
+  expect(g.phase).not.toBe('voting')
+  expect(g.vote!.result!.tally[6]).toBe(1)
+  expect(() => s.as(0, { type: 'voteCancel' })).toThrow()
 })

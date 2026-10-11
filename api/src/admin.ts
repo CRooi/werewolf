@@ -82,7 +82,11 @@ function describe(msg: ClientMessage): string {
     case 'wolfSelect':
       return msg.choice === null ? '取消选择' : msg.choice === 'none' ? '选择今晚不猎杀' : `选择猎杀 ${seatText(msg.choice)}`
     case 'wolfConfirm':
-      return '确认猎杀'
+      return '确定选择'
+    case 'wolfCancel':
+      return '取消确定'
+    case 'wolfFinal':
+      return '最终确认猎杀'
     case 'wolfChat':
       return `狼人频道：${msg.text}`
     case 'ghostChat':
@@ -99,6 +103,8 @@ function describe(msg: ClientMessage): string {
       return msg.choice === null ? '取消投票选择' : msg.choice === 'abstain' ? '选择弃票' : `选择投给 ${seatText(msg.choice)}`
     case 'voteConfirm':
       return '确认投票'
+    case 'voteCancel':
+      return '撤回投票'
     case 'witchDraft': {
       const parts = [msg.save && '解药', msg.poison && (msg.target !== null ? `毒药 → ${seatText(msg.target)}` : '毒药')].filter(Boolean)
       return parts.length ? `正在选择：${parts.join('、')}` : '取消选择'

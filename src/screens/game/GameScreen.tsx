@@ -230,7 +230,7 @@ function ActionDialogBody({ g, kind, send }: { g: GameView; kind: ActionKind | n
     case 'wolf':
       body = (
         <>
-          {head('请确认猎杀对象', '所有狼人选择一致后才能确定，可以自刀', 'text-red-400')}
+          {head('请确认猎杀对象', '各自选好后点确定，全部确定且一致才算数，可以自刀', 'text-red-400')}
           <WolfPanel g={g} send={send} />
         </>
       )
