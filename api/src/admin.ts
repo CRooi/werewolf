@@ -211,11 +211,15 @@ export function recordRoomClosed(room: Room, reason: string) {
   try {
     const g = room.d.game
     if (!g) return
-    const now = Date.now()
-    ensureRecord(room, g.id)
-    addGameEvent(g.id, { ts: now, actor: '系统', text: reason, phase: g.phase, day: g.day, state: g })
-    if (g.phase === 'revealed') finishGameRecord(g.id, 'finished', g.winner)
-    else finishGameRecord(g.id, 'aborted', null)
+    // 结束时间记为最后一次有人操作的时间，而不是解散的时刻
+    const lastActive = room.d.lastActiveAt ?? Date.now()
+    if (!hasGameRecord(g.id)) {
+      // 记录功能上线前的对局：开局时间未知，只补记最终局面
+      createGameRecord(g.id, room.d.code, { ...room.replayMeta(), backfilled: true }, lastActive)
+    }
+    addGameEvent(g.id, { ts: lastActive, actor: '系统', text: reason, phase: g.phase, day: g.day, state: g })
+    if (g.phase === 'revealed') finishGameRecord(g.id, 'finished', g.winner, lastActive)
+    else finishGameRecord(g.id, 'aborted', null, lastActive)
   } catch (e) {
     console.error('记录房间关闭失败', e)
   }
@@ -268,9 +272,11 @@ export function registerAdminRoutes(app: express.Express, rooms: Map<string, Roo
   app.get('/api/admin/games', requireAdmin, (_req, res) => {
     res.json(
       listGameRecords().map((g) => {
-        const meta = JSON.parse(g.meta) as ReplayMeta
+        const meta = JSON.parse(g.meta) as ReplayMeta & { backfilled?: boolean; recovered?: boolean }
         return {
           id: g.id,
+          backfilled: !!meta.backfilled,
+          recovered: !!meta.recovered,
           code: g.code,
           round: g.round,
           status: g.status,
@@ -288,7 +294,19 @@ export function registerAdminRoutes(app: express.Express, rooms: Map<string, Roo
   app.get('/api/admin/games/:id', requireAdmin, (req, res) => {
     const g = getGameRecord(String(req.params.id))
     if (!g) return void res.status(404).json({ error: '对局不存在' })
-    res.json({ id: g.id, code: g.code, round: g.round, status: g.status, winner: g.winner, startedAt: g.started_at, endedAt: g.ended_at, events: getGameEvents(g.id) })
+    const meta = JSON.parse(g.meta) as { backfilled?: boolean; recovered?: boolean }
+    res.json({
+      id: g.id,
+      code: g.code,
+      round: g.round,
+      status: g.status,
+      winner: g.winner,
+      startedAt: g.started_at,
+      endedAt: g.ended_at,
+      backfilled: !!meta.backfilled,
+      recovered: !!meta.recovered,
+      events: getGameEvents(g.id),
+    })
   })
 
   app.get('/api/admin/games/:id/events/:seq', requireAdmin, (req, res) => {

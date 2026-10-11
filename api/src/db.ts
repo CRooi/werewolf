@@ -98,8 +98,8 @@ export function hasGameRecord(id: string) {
   return !!db.prepare('SELECT 1 FROM games WHERE id = ?').get(id)
 }
 
-export function finishGameRecord(id: string, status: Exclude<GameStatus, 'playing'>, winner: string | null) {
-  updateGame.run(status, winner, Date.now(), id, 'playing')
+export function finishGameRecord(id: string, status: Exclude<GameStatus, 'playing'>, winner: string | null, endedAt = Date.now()) {
+  updateGame.run(status, winner, endedAt, id, 'playing')
 }
 
 export function addGameEvent(gameId: string, e: Omit<EventRow, 'seq'> & { state: unknown }) {

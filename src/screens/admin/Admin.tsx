@@ -214,7 +214,8 @@ const gameStatus = (g: Pick<AdminGame, 'status' | 'winner'>): [string, string] =
       ? ['已终止', 'bg-white/10 text-muted-foreground']
       : [g.winner === 'wolf' ? '狼人胜利' : '好人胜利', g.winner === 'wolf' ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300']
 
-const duration = (g: Pick<AdminGame, 'startedAt' | 'endedAt'>) => (g.endedAt ? `用时 ${Math.max(1, Math.round((g.endedAt - g.startedAt) / 60000))} 分钟` : '进行中')
+const duration = (g: Pick<AdminGame, 'startedAt' | 'endedAt' | 'backfilled'>) =>
+  g.backfilled ? '用时未知' : g.endedAt ? `用时 ${Math.max(1, Math.round((g.endedAt - g.startedAt) / 60000))} 分钟` : '进行中'
 
 /** 对局列表：每次发牌算一局，同一房间的多局分别列出 */
 function GameList({ games, onOpen }: { games: AdminGame[]; onOpen: (id: string) => void }) {
@@ -242,11 +243,13 @@ function GameList({ games, onOpen }: { games: AdminGame[]; onOpen: (id: string) 
                   <div className="text-xs text-muted-foreground">房间 {g.code}</div>
                 </div>
                 <span className={cn('w-20 shrink-0 rounded-full px-2 py-0.5 text-center text-xs', cls)}>{label}</span>
-                <span className="text-muted-foreground">{fmtDateTime(g.startedAt)} 发牌</span>
+                <span className="text-muted-foreground">{g.backfilled ? `${fmtDateTime(g.startedAt)} 最后操作` : `${fmtDateTime(g.startedAt)} 发牌`}</span>
                 <span className="text-muted-foreground">{duration(g)}</span>
                 <span className="text-muted-foreground">
                   法官 {g.judge} · {g.players} 人 · {g.events} 个事件
                 </span>
+                {g.backfilled && <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">补记 · 仅最终局面</span>}
+                {g.recovered && <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">从数据库残留恢复</span>}
                 <Button variant="stone" size="sm" className="ml-auto" onClick={() => onOpen(g.id)}>
                   <History /> 回放
                 </Button>
@@ -319,6 +322,8 @@ interface GameDetail {
   id: string
   code: string
   round: number
+  backfilled: boolean
+  recovered: boolean
   status: AdminGame['status']
   winner: AdminGame['winner']
   startedAt: number
@@ -428,12 +433,19 @@ function Replay({ id, onError }: { id: string; onError: (e: unknown) => void }) 
         </span>
         <span className={cn('rounded-full px-2 py-0.5 text-xs', statusCls)}>{statusLabel}</span>
         <span className="text-muted-foreground">
-          {fmtDateTime(detail.startedAt)} 发牌 · {duration(detail)} · {events.length} 个事件
+          {detail.backfilled ? `${fmtDateTime(detail.startedAt)} 最后操作` : `${fmtDateTime(detail.startedAt)} 发牌`} · {duration(detail)} · {events.length} 个事件
         </span>
+        {detail.recovered && <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">从数据库残留恢复，操作者由前后局面推断</span>}
       </div>
+      {events.length <= 1 && (
+        <div className="rounded-lg bg-black/40 px-4 py-2 text-sm text-amber-200">
+          这局开始于记录功能上线之前，只保存了最终局面，没有可回放的过程。
+        </div>
+      )}
       <div className="min-h-0 flex-1">{view ? <AdminBoard state={view} extraTab={{ label: '时间轴', content: timeline }} /> : <div className="py-20 text-center text-gold-soft">加载局面…</div>}</div>
 
-      {/* 时间轴控制条 */}
+      {/* 时间轴控制条（只有一个事件时没有过程可回放，不显示） */}
+      {events.length > 1 && (
       <div className="panel flex items-center gap-3 px-4 py-3">
         <Button variant="stone" size="icon-lg" onClick={() => setIndex((i) => Math.max(0, i - 1))} aria-label="上一步">
           <ChevronLeft />
@@ -473,6 +485,7 @@ function Replay({ id, onError }: { id: string; onError: (e: unknown) => void }) 
           +{Math.floor(elapsed / 60000)}:{String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0')}
         </span>
       </div>
+      )}
       {current && (
         <div className="-mt-1 truncate px-1 text-sm">
           <span className="font-mono text-muted-foreground">{fmtTime(current.ts)}</span>

@@ -56,6 +56,10 @@ export interface AdminGame {
   code: string
   /** 该房间的第几局 */
   round: number
+  /** 记录功能上线前的对局，只有最终局面 */
+  backfilled: boolean
+  /** 从数据库残留中恢复的对局 */
+  recovered: boolean
   status: 'playing' | 'finished' | 'aborted'
   winner: 'wolf' | 'good' | null
   startedAt: number
