@@ -102,7 +102,7 @@ function Board({ code }: { code: string }) {
 
 // ---------------- 圆桌 ----------------
 
-function Table({ state, g }: { state: StateView; g: GameView | null }) {
+export function Table({ state, g }: { state: StateView; g: GameView | null }) {
   const seats = state.room.seats
   const n = seats.length
   return (
@@ -133,6 +133,8 @@ function SeatBadge({ seat, name, online, g }: { seat: number; name: string | nul
   const night = g ? isNight(g.phase) : false
   const vote = g?.vote && ['voting', 'vote_result', 'idiot'].includes(g.phase) ? g.vote : null
   const voters = vote ? vote.voters.filter((s) => vote.ballots[s]?.choice === seat) : []
+  // 上帝视角（后台）才有狼人数据：刀人阶段显示每只狼选了谁
+  const wolfPickers = g?.wolf && g.phase === 'wolf_pick' ? g.wolf.aliveSeats.filter((s) => g.wolf!.selections[s] === seat) : []
   const eliminated = vote?.result?.eliminated === seat
   const isCandidate = vote?.candidates?.includes(seat)
   const hue = name ? avatarHue(name) : 0
@@ -176,6 +178,15 @@ function SeatBadge({ seat, name, online, g }: { seat: number; name: string | nul
       {role && (
         <div className="text-[1.8vh] leading-none" style={{ color: ROLE_THEME[role].accent }}>
           {roleLabel(role)}
+        </div>
+      )}
+      {wolfPickers.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-[0.3vh]">
+          {wolfPickers.map((s) => (
+            <span key={s} className="flex h-[2.4vh] items-center rounded-full bg-blood/85 px-[0.6vh] text-[1.5vh] font-bold text-white">
+              🐾{s + 1}
+            </span>
+          ))}
         </div>
       )}
       {voters.length > 0 && (

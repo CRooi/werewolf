@@ -105,6 +105,14 @@ export interface GameState {
   lastNightDeaths: number[] | null
 }
 
+export interface ReplayMeta {
+  code: string
+  config: RoomConfig
+  judgeId: string
+  /** 用户 id -> 名字（法官与入座玩家） */
+  users: Record<string, string>
+}
+
 export interface RoomData {
   code: string
   createdAt: number
@@ -119,6 +127,8 @@ export interface RoomData {
 }
 
 const SPECTATOR_ID = '__spectator__'
+/** 后台管理员视角：等同观战席的上帝视角 */
+export const ADMIN_ID = '__admin__'
 
 const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12)
 
@@ -925,6 +935,37 @@ export class Room {
 
   // ---------------- views ----------------
 
+  /** 后台上帝视角（只读） */
+  adminView(online: (id: string) => boolean): StateView {
+    return this.view(ADMIN_ID, online)
+  }
+
+  /** 由回放快照重建后台视角 */
+  static replayView(meta: ReplayMeta, game: GameState): StateView {
+    const users: Record<string, User> = {}
+    for (const [id, name] of Object.entries(meta.users)) users[id] = { id, token: '', name }
+    const room = new Room({
+      code: meta.code,
+      createdAt: 0,
+      config: meta.config,
+      judgeId: meta.judgeId,
+      users,
+      seats: game.seats.slice(),
+      spectators: [],
+      swaps: [],
+      game,
+    })
+    return room.adminView(() => false)
+  }
+
+  /** 对局开始时用于回放的元数据 */
+  replayMeta(): ReplayMeta {
+    const d = this.d
+    const users: Record<string, string> = {}
+    for (const id of [d.judgeId, ...(d.game?.seats ?? [])]) users[id] = d.users[id]?.name ?? '?'
+    return { code: d.code, config: d.config, judgeId: d.judgeId, users }
+  }
+
   /** 大屏观战视角：以“非房间成员”的身份投影，只包含所有人可见的信息 */
   spectatorView(online: (id: string) => boolean): StateView {
     return this.view(SPECTATOR_ID, online)
@@ -934,7 +975,7 @@ export class Room {
     const d = this.d
     const brief = (id: string) => ({ id, name: d.users[id]?.name ?? '?', online: online(id) })
     const isJudge = userId === d.judgeId
-    const isSpectator = this.isSpectator(userId)
+    const isSpectator = this.isSpectator(userId) || userId === ADMIN_ID
     const roomSeat = this.seatOf(userId)
     return {
       me: { id: userId, name: d.users[userId]?.name ?? '?', isJudge, isSpectator, seat: roomSeat },

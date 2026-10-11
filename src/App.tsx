@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { cleanUrl, loadName, loadSession, saveSession, SLOT, type Session } from '@/lib/session'
+import { Admin } from '@/screens/admin/Admin'
 import { Debug } from '@/screens/Debug'
 import { Home } from '@/screens/Home'
 import { Overview } from '@/screens/Overview'
@@ -9,6 +10,7 @@ import { RoomScreen } from '@/screens/RoomScreen'
 const params = new URLSearchParams(location.search)
 const IS_DEBUG_PAGE = params.has('debug')
 const IS_OVERVIEW = params.has('overview')
+const IS_ADMIN = params.has('admin')
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession())
@@ -26,6 +28,15 @@ export default function App() {
   }, [session])
 
   if (IS_OVERVIEW) return <Overview />
+
+  if (IS_ADMIN) {
+    return (
+      <>
+        <Admin />
+        <Toaster position="top-center" richColors closeButton={false} />
+      </>
+    )
+  }
 
   if (IS_DEBUG_PAGE) {
     return (

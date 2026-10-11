@@ -5,6 +5,7 @@ import express from 'express'
 import { WebSocketServer, WebSocket } from 'ws'
 import type { ClientMessage, ServerMessage } from '../../shared/types'
 import { deleteRoom, loadRooms, saveRoom } from './db'
+import { recordAction, registerAdminRoutes, snapshotBefore, verifyAdminToken } from './admin'
 import { GameError, Room, genCode } from './room'
 
 const rooms = new Map<string, Room>()
@@ -13,6 +14,9 @@ for (const d of loadRooms()) rooms.set(d.code, new Room(d))
 /** 大屏观战连接的 key 前缀，不对应任何玩家 */
 const SPECTATOR_PREFIX = 'spec:'
 const isSpectator = (key: string) => key.startsWith(SPECTATOR_PREFIX)
+/** 后台上帝视角连接的 key 前缀 */
+const ADMIN_PREFIX = 'admin:'
+const isAdmin = (key: string) => key.startsWith(ADMIN_PREFIX)
 
 /** code -> userId（或观战 key）-> sockets */
 const sockets = new Map<string, Map<string, Set<WebSocket>>>()
@@ -31,7 +35,13 @@ function broadcast(room: Room) {
   const conns = sockets.get(room.d.code)
   if (!conns) return
   let spectatorMsg: ServerMessage | null = null
+  let adminMsg: ServerMessage | null = null
   for (const userId of conns.keys()) {
+    if (isAdmin(userId)) {
+      adminMsg ??= { type: 'state', state: room.adminView(online(room.d.code)) }
+      sendUser(room.d.code, userId, adminMsg)
+      continue
+    }
     if (isSpectator(userId)) {
       spectatorMsg ??= { type: 'state', state: room.spectatorView(online(room.d.code)) }
       sendUser(room.d.code, userId, spectatorMsg)
@@ -98,6 +108,8 @@ app.get('/api/rooms/:code', wrap((req, res) => {
   })
 }))
 
+registerAdminRoutes(app, rooms, online)
+
 // 生产环境：托管前端构建产物
 const dist = path.resolve(import.meta.dir, '../../dist')
 if (existsSync(dist)) {
@@ -113,6 +125,28 @@ wss.on('connection', (ws, req) => {
   const code = url.searchParams.get('code') ?? ''
   const token = url.searchParams.get('token') ?? ''
   const room = rooms.get(code)
+
+  // 后台上帝视角：只读，需要管理员令牌
+  if (url.searchParams.has('admin')) {
+    if (!verifyAdminToken(url.searchParams.get('admin'))) {
+      send(ws, { type: 'kicked', reason: '请重新登录后台' })
+      return ws.close()
+    }
+    if (!room) {
+      send(ws, { type: 'kicked', reason: '房间不存在或已解散' })
+      return ws.close()
+    }
+    const key = ADMIN_PREFIX + crypto.randomUUID()
+    let byKey = sockets.get(code)
+    if (!byKey) sockets.set(code, (byKey = new Map()))
+    byKey.set(key, new Set([ws]))
+    send(ws, { type: 'state', state: room.adminView(online(code)) })
+    ws.on('message', (raw) => {
+      if (String(raw).includes('"ping"')) send(ws, { type: 'pong' })
+    })
+    ws.on('close', () => byKey!.delete(key))
+    return
+  }
 
   // 大屏观战：只读，收到的是所有人可见的公开状态
   if (url.searchParams.has('spectate')) {
@@ -159,7 +193,9 @@ wss.on('connection', (ws, req) => {
       return ws.close()
     }
     try {
+      const before = snapshotBefore(cur)
       const fx = cur.handle(user.id, msg)
+      recordAction(cur, user.id, msg, before, !!fx.disband)
       if (fx.disband) {
         rooms.delete(code)
         deleteRoom(code)

@@ -4,6 +4,18 @@
 @import "@fontsource-variable/geist";
 /* 标题字体随项目打包，按 unicode-range 分片按需加载，不依赖 Google Fonts */
 @import "@fontsource/zcool-xiaowei";
+/*
+ * 站酷小薇的「回」(U+56DE) 字形是实心方块，单独用系统字体顶替。
+ * 同一字体族中 unicode-range 重叠时，后声明的规则优先。
+ */
+@font-face {
+  font-family: 'ZCOOL XiaoWei';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Songti SC'), local('STSong'), local('PingFang SC'), local('Microsoft YaHei'), local('Noto Serif CJK SC'), local('Noto Sans CJK SC'), local('SimSun');
+  unicode-range: U+56DE;
+}
 
 @custom-variant dark (&:is(.dark *));
 

@@ -124,7 +124,7 @@ export function Stage({ state, send }: { state: StateView; send: (m: ClientMessa
 }
 
 /** 夜间速览（法官与出局观战者可见）：今晚各角色的行动 */
-function NightSummary({ g }: { g: GameView }) {
+export function NightSummary({ g }: { g: GameView }) {
   const name = (s: number) => `${s + 1}号 ${g.players[s]?.user.name ?? ''}`
   const short = (c: number | 'none' | null | undefined) => (c === 'none' ? '不杀' : typeof c === 'number' ? `${c + 1}号` : '未选')
   const phase = g.phase
