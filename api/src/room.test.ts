@@ -136,7 +136,7 @@ test('witch cannot self-save; poisoned hunter cannot shoot; dead seer flow skipp
   const s = setup()
   s.fixRoles(ROLES)
   const g = s.room.d.game!
-  expect(() => night(s, 3, { save: true })).toThrow('女巫不能自救')
+  expect(() => night(s, 3, { save: true })).toThrow('女巫第一晚不能自救')
   // continue: witch acts with poison on hunter
   s.as(3, { type: 'witchAct', save: false, poison: 4 })
   s.J('witchClose')
@@ -517,26 +517,22 @@ test('vote: confirmed ballots cannot be changed', () => {
   expect(() => s.as(0, { type: 'voteSelect', choice: 6 })).toThrow('已经确认投票')
 })
 
-test('witch self-save: only on the first night when enabled', () => {
-  const s = setup({ ...cfg, witchSelfSave: true })
+test('witch self-save: the switch only applies to the first night', () => {
+  // 关闭：第一晚不能自救，第二晚可以
+  const s = setup({ ...cfg, witchSelfSave: false })
   s.fixRoles(ROLES)
   const g = s.room.d.game!
-  // 第一晚女巫被刀，可以自救
+  night(s, 'none')
+  s.J('voteStart')
+  vote(s, { 0: 'abstain', 1: 'abstain', 2: 'abstain', 3: 'abstain', 4: 'abstain', 5: 'abstain', 6: 'abstain' })
   night(s, 3, { save: true })
   expect(g.alive[3]).toBe(true)
   expect(g.antidote).toBe(false)
-  s.J('voteStart')
-  vote(s, { 0: 'abstain', 1: 'abstain', 2: 'abstain', 3: 'abstain', 4: 'abstain', 5: 'abstain', 6: 'abstain' })
-  s.J('nightStart')
-  // 第二晚解药已用完；把解药补回来，确认第二晚也不能自救
-  g.antidote = true
-  s.J('wolfWake'); s.as(0, { type: 'openEyes' }); s.as(1, { type: 'openEyes' }); s.J('wolfPick')
-  s.as(0, { type: 'wolfSelect', choice: 3 }); s.as(1, { type: 'wolfSelect', choice: 3 })
-  s.as(0, { type: 'wolfConfirm' }); s.as(1, { type: 'wolfConfirm' }); s.as(0, { type: 'wolfFinal' }); s.J('wolfClose')
-  s.J('seerWake'); s.as(2, { type: 'openEyes' }); s.J('seerPick'); s.as(2, { type: 'seerSelect', seat: 0 }); s.as(2, { type: 'seerConfirm' }); s.J('seerReveal'); s.J('seerClose')
-  s.J('witchWake'); s.as(3, { type: 'openEyes' }); s.J('witchInform')
-  expect(s.room.view(g.seats[3]!, () => true).game!.witch!.selfSave).toBe(false)
-  expect(() => s.as(3, { type: 'witchAct', save: true, poison: null })).toThrow('女巫只有第一晚可以自救')
+  // 开启：第一晚也能自救
+  const t = setup({ ...cfg, witchSelfSave: true })
+  t.fixRoles(ROLES)
+  night(t, 3, { save: true })
+  expect(t.room.d.game!.alive[3]).toBe(true)
 })
 
 test('views of a revealed game do not throw (regression: server crash loop)', () => {

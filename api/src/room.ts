@@ -704,7 +704,7 @@ export class Room {
         if (msg.save) {
           if (!g.antidote) fail('解药已经用完')
           if (victim === null) fail('今晚没有人被猎杀')
-          if (victim === mySeat && !this.canWitchSelfSave()) fail(this.d.config.witchSelfSave ? '女巫只有第一晚可以自救' : '女巫不能自救')
+          if (victim === mySeat && !this.canWitchSelfSave()) fail('女巫第一晚不能自救')
         }
         if (msg.poison !== null) {
           if (!g.poison) fail('毒药已经用完')
@@ -957,9 +957,9 @@ export class Room {
     }
   }
 
-  /** 女巫今晚能否自救：规则开启时只有第一晚可以。生成画面时也会调用，对局已公布结果时不能用 g() */
+  /** 女巫今晚能否自救：规则只限制第一晚，第二晚起都可以。生成画面时也会调用，对局已公布结果时不能用 g() */
   private canWitchSelfSave() {
-    return this.d.config.witchSelfSave && this.d.game?.day === 1
+    return this.d.game?.day !== 1 || this.d.config.witchSelfSave
   }
 
   /** 狼人本轮选择作废，所有狼人重新选择（候选仍是全部存活玩家） */
@@ -1230,7 +1230,6 @@ export class Room {
               draft: n.witchDraft ?? { save: false, poison: false, target: null },
               bothSameNight: c.witchBothSameNight,
               selfSave: this.canWitchSelfSave(),
-              selfSaveFirstNight: c.witchSelfSave,
             }
           : null,
       vote: g.vote,
