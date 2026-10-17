@@ -516,3 +516,25 @@ test('vote: confirmed ballots cannot be changed', () => {
   s.as(0, { type: 'voteSelect', choice: 5 }); s.as(0, { type: 'voteConfirm' })
   expect(() => s.as(0, { type: 'voteSelect', choice: 6 })).toThrow('已经确认投票')
 })
+
+test('witch self-save: only on the first night when enabled', () => {
+  const s = setup({ ...cfg, witchSelfSave: true })
+  s.fixRoles(ROLES)
+  const g = s.room.d.game!
+  // 第一晚女巫被刀，可以自救
+  night(s, 3, { save: true })
+  expect(g.alive[3]).toBe(true)
+  expect(g.antidote).toBe(false)
+  s.J('voteStart')
+  vote(s, { 0: 'abstain', 1: 'abstain', 2: 'abstain', 3: 'abstain', 4: 'abstain', 5: 'abstain', 6: 'abstain' })
+  s.J('nightStart')
+  // 第二晚解药已用完；把解药补回来，确认第二晚也不能自救
+  g.antidote = true
+  s.J('wolfWake'); s.as(0, { type: 'openEyes' }); s.as(1, { type: 'openEyes' }); s.J('wolfPick')
+  s.as(0, { type: 'wolfSelect', choice: 3 }); s.as(1, { type: 'wolfSelect', choice: 3 })
+  s.as(0, { type: 'wolfConfirm' }); s.as(1, { type: 'wolfConfirm' }); s.as(0, { type: 'wolfFinal' }); s.J('wolfClose')
+  s.J('seerWake'); s.as(2, { type: 'openEyes' }); s.J('seerPick'); s.as(2, { type: 'seerSelect', seat: 0 }); s.as(2, { type: 'seerConfirm' }); s.J('seerReveal'); s.J('seerClose')
+  s.J('witchWake'); s.as(3, { type: 'openEyes' }); s.J('witchInform')
+  expect(s.room.view(g.seats[3]!, () => true).game!.witch!.selfSave).toBe(false)
+  expect(() => s.as(3, { type: 'witchAct', save: true, poison: null })).toThrow('女巫只有第一晚可以自救')
+})

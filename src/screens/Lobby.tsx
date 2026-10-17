@@ -147,7 +147,7 @@ export function Lobby({ state, status, send, onReview }: Props) {
         </div>
         {room.config.witch > 0 && (
           <div className="text-center text-xs text-muted-foreground">
-            女巫：{room.config.witchBothSameNight ? '解药毒药可同晚使用' : '每晚只能使用一瓶药'} · {room.config.witchSelfSave ? '可以自救' : '不能自救'}
+            女巫：{room.config.witchBothSameNight ? '解药毒药可同晚使用' : '每晚只能使用一瓶药'} · {room.config.witchSelfSave ? '第一晚可以自救' : '不能自救'}
           </div>
         )}
         {room.config.allowSpectators && (

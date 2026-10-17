@@ -420,7 +420,7 @@ export function WitchPanel({ g, send, mirror }: { g: GameView; send?: Send; mirr
         <div className="mt-1 font-display text-xl">
           {!showVictim ? <span className="text-muted-foreground">解药已用完，无法得知</span> : victim === null ? '平安夜，无人被猎杀' : <span className="text-red-300">{seatName(g, victim)} 被猎杀</span>}
         </div>
-        {selfBlocked && w.antidote && showVictim && <div className="mt-1 text-xs text-amber-300">女巫不能自救</div>}
+        {selfBlocked && w.antidote && showVictim && <div className="mt-1 text-xs text-amber-300">{w.selfSaveFirstNight ? '女巫只有第一晚可以自救' : '女巫不能自救'}</div>}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <button

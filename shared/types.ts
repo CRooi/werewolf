@@ -25,7 +25,7 @@ export interface RoomConfig {
   villager: number
   /** 女巫是否可以同一晚同时使用解药和毒药 */
   witchBothSameNight: boolean
-  /** 女巫是否可以自救 */
+  /** 女巫第一晚是否可以自救（第二晚起一律不能自救） */
   witchSelfSave: boolean
   /** 是否允许观战（上帝视角，只读） */
   allowSpectators: boolean
@@ -161,7 +161,10 @@ export interface WitchView {
   saved: boolean
   poisoned: number | null
   bothSameNight: boolean
+  /** 今晚女巫能否自救 */
   selfSave: boolean
+  /** 本局规则：女巫第一晚可以自救 */
+  selfSaveFirstNight: boolean
   draft: WitchDraft
 }
 

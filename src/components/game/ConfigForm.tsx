@@ -41,8 +41,8 @@ export function ConfigForm({ value, onChange }: { value: RoomConfig; onChange: (
           </label>
           <label className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-medium">女巫可以自救</div>
-              <div className="text-xs text-muted-foreground">女巫被刀时能否对自己用解药</div>
+              <div className="text-sm font-medium">女巫第一晚可以自救</div>
+              <div className="text-xs text-muted-foreground">开启后只有第一晚被刀时能对自己用解药，第二晚起不能自救</div>
             </div>
             <Switch checked={value.witchSelfSave} onCheckedChange={(v) => onChange({ ...value, witchSelfSave: v })} />
           </label>

@@ -294,7 +294,7 @@ function JoinPanel({ state }: { state: StateView }) {
       </div>
       {c.witch > 0 && (
         <div className="text-[1.9vh] text-muted-foreground">
-          女巫：{c.witchBothSameNight ? '双药可同晚使用' : '每晚只能使用一瓶药'} · {c.witchSelfSave ? '可以自救' : '不能自救'}
+          女巫：{c.witchBothSameNight ? '双药可同晚使用' : '每晚只能使用一瓶药'} · {c.witchSelfSave ? '第一晚可以自救' : '不能自救'}
         </div>
       )}
       <div className="mt-auto text-[2vh] text-muted-foreground">
