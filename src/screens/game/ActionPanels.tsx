@@ -490,6 +490,8 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
   const chips = (c: number | 'abstain') => votersFor(c).map((s) => <SeatChip key={s} seat={s} variant={v.ballots[s]!.confirmed ? 'solid' : 'dashed'} />)
   const pick = (c: number | 'abstain') => !locked && send?.({ type: 'voteSelect', choice: my?.choice === c ? null : c })
   const confirmed = v.voters.filter((s) => v.ballots[s]?.confirmed).length
+  // 还没确认投票的人（只选了没确认也算）
+  const pending = v.voters.filter((s) => !v.ballots[s]?.confirmed)
   const [ask, setAsk] = useState<ConfirmRequest | null>(null)
   const confirmVote = () => {
     const c = my?.choice
@@ -524,6 +526,19 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
           已确认 {confirmed}/{v.voters.length}
         </span>
       </div>
+      {pending.length > 0 && (
+        <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+          <div className="mb-1.5 text-[11px] text-muted-foreground">还没投票（{pending.length} 人）</div>
+          <div className="flex flex-wrap gap-1.5">
+            {pending.map((s) => (
+              <span key={s} className={cn('rounded-full px-2 py-0.5 text-xs', s === me ? 'bg-gold/25 text-gold-soft' : 'bg-white/10')}>
+                {seatName(g, s)}
+                {s === me && '（我）'}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {canVote &&
         (my?.confirmed ? (
           <div className="text-center text-sm text-muted-foreground">
