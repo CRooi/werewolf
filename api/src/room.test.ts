@@ -508,22 +508,11 @@ test('wolves: lock, unlock, cancel final confirm restarts the pick', () => {
   J('wolfClose')
 })
 
-test('vote: ballots can be withdrawn until everyone has voted', () => {
+test('vote: confirmed ballots cannot be changed', () => {
   const s = setup()
   s.fixRoles(ROLES)
   night(s, 'none')
   s.J('voteStart')
-  const g = s.room.d.game!
-  expect(() => s.as(0, { type: 'voteCancel' })).toThrow('还没有投票')
   s.as(0, { type: 'voteSelect', choice: 5 }); s.as(0, { type: 'voteConfirm' })
   expect(() => s.as(0, { type: 'voteSelect', choice: 6 })).toThrow('已经确认投票')
-  s.as(0, { type: 'voteCancel' })
-  s.as(0, { type: 'voteSelect', choice: 6 }); s.as(0, { type: 'voteConfirm' })
-  for (const seat of [1, 2, 3, 4, 5, 6]) {
-    s.as(seat, { type: 'voteSelect', choice: 'abstain' })
-    s.as(seat, { type: 'voteConfirm' })
-  }
-  expect(g.phase).not.toBe('voting')
-  expect(g.vote!.result!.tally[6]).toBe(1)
-  expect(() => s.as(0, { type: 'voteCancel' })).toThrow()
 })

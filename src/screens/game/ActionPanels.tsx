@@ -496,7 +496,7 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
     if (c === null || c === undefined) return
     setAsk({
       title: c === 'abstain' ? '确定弃票吗？' : `确定投给 ${seatName(g, c)} 吗？`,
-      description: '所有人投完票之前，你还可以撤回重新选择。',
+      description: '投票确认后不能更改。',
       onConfirm: () => send?.({ type: 'voteConfirm' }),
     })
   }
@@ -526,13 +526,8 @@ export function VoteBoard({ g, send, canVote }: { g: GameView; send?: Send; canV
       </div>
       {canVote &&
         (my?.confirmed ? (
-          <div className="space-y-2">
-            <div className="text-center text-sm text-muted-foreground">
-              已{my.choice === 'abstain' ? '弃票' : `投给 ${seatName(g, my.choice as number)}`}，等待其他玩家…所有人投完前可以撤回
-            </div>
-            <Button variant="stone" size="lg2" className="w-full" onClick={() => send?.({ type: 'voteCancel' })}>
-              <Undo2 /> 撤回投票，重新选择
-            </Button>
+          <div className="text-center text-sm text-muted-foreground">
+            已{my.choice === 'abstain' ? '弃票' : `投给 ${seatName(g, my.choice as number)}`}，等待其他玩家…
           </div>
         ) : (
           <Button variant="gold" size="xl" className="w-full" disabled={!my || my.choice === null} onClick={confirmVote}>

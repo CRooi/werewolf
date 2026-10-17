@@ -717,14 +717,6 @@ export class Room {
         if (v.voters.every((s) => v.ballots[s]?.confirmed)) this.tallyVote()
         return
       }
-      case 'voteCancel': {
-        // 所有人投完之前可以撤回；全部投完会立即唱票，之后就不能再改
-        this.expect('voting')
-        const b = g.vote!.ballots[mySeat]
-        if (!b?.confirmed) fail('你还没有投票')
-        b.confirmed = false
-        return
-      }
       case 'idiotDecide': {
         this.expect('idiot')
         if (!g.idiot || g.idiot.seat !== mySeat) fail('你不是待决定的白痴')

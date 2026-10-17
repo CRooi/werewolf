@@ -319,8 +319,6 @@ export type ClientMessage =
   | { type: 'witchAct'; save: boolean; poison: number | null }
   | { type: 'voteSelect'; choice: VoteChoice }
   | { type: 'voteConfirm' }
-  /** 所有人投完之前撤回自己的投票 */
-  | { type: 'voteCancel' }
   | { type: 'hunterShoot'; target: number | null }
   | { type: 'hunterDraft'; target: number | null }
   | { type: 'witchDraft'; save: boolean; poison: boolean; target: number | null }
