@@ -73,6 +73,8 @@ function describe(msg: ClientMessage): string {
   switch (msg.type) {
     case 'start':
       return '开始游戏，发牌'
+    case 'shuffleRoles':
+      return '刷新预发身份'
     case 'judge':
       return STEP_TEXT[msg.step]
     case 'tieChoose':

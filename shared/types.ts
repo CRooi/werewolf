@@ -266,6 +266,8 @@ export interface RoomView {
   idleWarnMs: number
   /** 游戏进行中（未公布结果） */
   inGame: boolean
+  /** 法官预先刷出的身份（按座位），开始游戏时按此发牌；只有法官、观战席和后台能看到 */
+  rolePreview: (Role | null)[] | null
 }
 
 export interface StateView {
@@ -304,6 +306,8 @@ export type ClientMessage =
   | { type: 'disband' }
   | { type: 'updateConfig'; config: RoomConfig }
   | { type: 'start' }
+  /** 法官在开局前刷新预发身份，可以多次刷新 */
+  | { type: 'shuffleRoles' }
   | { type: 'abort' }
   | { type: 'judge'; step: JudgeStep }
   | { type: 'tieChoose'; seat: number }

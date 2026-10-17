@@ -549,3 +549,38 @@ test('views of a revealed game do not throw (regression: server crash loop)', ()
   expect(() => s.room.spectatorView(() => true)).not.toThrow()
   expect(() => s.room.adminView(() => true)).not.toThrow()
 })
+
+test('judge can reshuffle a role preview before dealing; the game uses it', () => {
+  const s = setup()
+  const { room, judge } = s
+  const player = room.d.seats[0]!
+  expect(() => room.handle(player, { type: 'shuffleRoles' })).toThrow()
+  room.handle(judge.id, { type: 'shuffleRoles' })
+  room.handle(judge.id, { type: 'shuffleRoles' })
+  const preview = room.view(judge.id, () => true).room.rolePreview!
+  expect(preview).toHaveLength(7)
+  expect(preview.filter((r) => r === 'werewolf')).toHaveLength(2)
+  // 普通玩家看不到预发身份
+  expect(room.view(player, () => true).room.rolePreview).toBeNull()
+  expect(room.spectatorView(() => true).room.rolePreview).toBeNull()
+  // 交换座位后身份跟着人走
+  const [a, b] = [room.d.seats[0]!, room.d.seats[1]!]
+  room.handle(a, { type: 'swapRequest', to: b })
+  room.handle(b, { type: 'swapRespond', id: room.d.swaps[0]!.id, accept: true })
+  const after = room.view(judge.id, () => true).room.rolePreview!
+  expect(after[0]).toBe(preview[1])
+  expect(after[1]).toBe(preview[0])
+  room.handle(judge.id, { type: 'start' })
+  expect(room.d.game!.roles).toEqual(after as any)
+  expect(room.d.rolePreview).toBeNull()
+})
+
+test('role preview is dropped when the players change', () => {
+  const s = setup()
+  const { room, judge } = s
+  room.handle(judge.id, { type: 'shuffleRoles' })
+  room.handle(room.d.seats[2]!, { type: 'leave' })
+  expect(room.view(judge.id, () => true).room.rolePreview).toBeNull()
+  room.join('新人')
+  expect(room.view(judge.id, () => true).room.rolePreview).toBeNull()
+})

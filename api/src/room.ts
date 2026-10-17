@@ -147,6 +147,8 @@ export interface RoomData {
   spectators: string[]
   swaps: SwapRequest[]
   game: GameState | null
+  /** 法官预先刷出的身份：用户 id -> 身份，开始游戏时按此发牌 */
+  rolePreview?: Record<string, Role> | null
 }
 
 const SPECTATOR_ID = '__spectator__'
@@ -424,6 +426,14 @@ export class Room {
         this.d.config = cfg
         return {}
       }
+      case 'shuffleRoles': {
+        needJudge()
+        needLobby()
+        if (this.d.seats.some((s) => !s)) fail('人还没满')
+        const roles = this.dealRoles()
+        this.d.rolePreview = Object.fromEntries(this.d.seats.map((id, i) => [id!, roles[i]!]))
+        return {}
+      }
       case 'start': {
         needJudge()
         needLobby()
@@ -460,7 +470,8 @@ export class Room {
     d.seats[sb!] = a
   }
 
-  private startGame() {
+  /** 按板子随机洗出一副身份 */
+  private dealRoles(): Role[] {
     const c = this.d.config
     const roles: Role[] = []
     for (const r of ROLE_ORDER) for (let i = 0; i < c[r]; i++) roles.push(r)
@@ -468,6 +479,27 @@ export class Room {
       const j = Math.floor(Math.random() * (i + 1))
       ;[roles[i], roles[j]] = [roles[j]!, roles[i]!]
     }
+    return roles
+  }
+
+  /**
+   * 仍然有效的预发身份（按座位）。身份跟着人走，换座位不受影响；
+   * 有人进出、法官换人或板子改动导致对不上时作废，返回 null。
+   */
+  private previewRoles(): Role[] | null {
+    const p = this.d.rolePreview
+    if (!p || this.d.seats.some((s) => !s)) return null
+    const roles = this.d.seats.map((id) => p[id!])
+    if (roles.some((r) => !r)) return null
+    const c = this.d.config
+    if (ROLE_ORDER.some((r) => roles.filter((x) => x === r).length !== c[r])) return null
+    return roles as Role[]
+  }
+
+  private startGame() {
+    const c = this.d.config
+    const roles = this.previewRoles() ?? this.dealRoles()
+    this.d.rolePreview = null
     this.d.swaps = []
     this.d.game = {
       id: uid(),
@@ -1101,6 +1133,7 @@ export class Room {
         idleRemainingMs: Math.max(0, (d.lastActiveAt ?? d.createdAt) + ROOM_IDLE_MS - Date.now()),
         idleWarnMs: ROOM_IDLE_WARN_MS,
         inGame: this.inGame,
+        rolePreview: (isJudge || isSpectator) && !this.inGame ? this.previewRoles() : null,
       },
       game: d.game ? this.gameView(userId, isJudge, isSpectator, brief) : null,
     }

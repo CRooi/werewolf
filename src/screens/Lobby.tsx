@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeftRight, Copy, Eye, History, LogOut, Play, Settings2, Trash2, UserX, X } from 'lucide-react'
+import { ArrowLeftRight, Copy, Eye, History, LogOut, Play, Settings2, Shuffle, Trash2, UserX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAX_SPECTATORS, ROLE_NAME, ROLE_ORDER, seatCount, type ClientMessage, type RoomConfig, type StateView, type UserBrief } from '@shared/types'
 import { cn } from '@/lib/utils'
@@ -105,6 +105,7 @@ export function Lobby({ state, status, send, onReview }: Props) {
               empty={!u}
               name={u?.name}
               online={u?.online}
+              role={u ? (room.rolePreview?.[seat] ?? undefined) : undefined}
               me={u?.id === me.id}
               selected={!!u && (outgoing?.to.id === u.id || incoming?.from.id === u.id)}
               onClick={me.isSpectator ? undefined : () => tapSeat(seat)}
@@ -193,14 +194,22 @@ export function Lobby({ state, status, send, onReview }: Props) {
       )}
 
       {me.isJudge ? (
-        <div className="mt-4 flex gap-2">
-          <Button variant="stone" size="xl" className="px-4" onClick={() => setEditing(room.config)}>
-            <Settings2 />
-          </Button>
-          <Button variant="gold" size="xl" className="flex-1" disabled={!full} onClick={() => send({ type: 'start' })}>
-            <Play /> {full ? '开始游戏' : `还差 ${total - filled} 人`}
-          </Button>
-        </div>
+        <>
+          {room.rolePreview && (
+            <div className="mt-3 text-center text-xs text-gold-soft/80">已刷出身份，玩家看不到，开始游戏将按此发牌</div>
+          )}
+          <div className="mt-3 flex gap-2">
+            <Button variant="stone" size="xl" className="px-4" onClick={() => setEditing(room.config)} aria-label="修改板子">
+              <Settings2 />
+            </Button>
+            <Button variant="mystic" size="xl" className="px-4" disabled={!full} onClick={() => send({ type: 'shuffleRoles' })}>
+              <Shuffle /> {room.rolePreview ? '再刷一次' : '刷新身份'}
+            </Button>
+            <Button variant="gold" size="xl" className="flex-1" disabled={!full} onClick={() => send({ type: 'start' })}>
+              <Play /> {full ? '开始游戏' : `还差 ${total - filled} 人`}
+            </Button>
+          </div>
+        </>
       ) : (
         <div className="panel mt-4 py-3 text-center font-display text-gold-soft/80">{me.isSpectator ? '你在观战席，等待法官开始游戏…' : '等待法官开始游戏…'}</div>
       )}
