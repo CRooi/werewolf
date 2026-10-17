@@ -1,4 +1,4 @@
-import { createServer } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import express from 'express'
@@ -34,7 +34,16 @@ function sendUser(code: string, userId: string, msg: ServerMessage) {
   for (const ws of sockets.get(code)?.get(userId) ?? []) send(ws, msg)
 }
 
+/** 给房间里所有连接推送最新画面；某个画面生成出错只记日志，不能让整个进程崩溃 */
 function broadcast(room: Room) {
+  try {
+    pushAll(room)
+  } catch (e) {
+    console.error(`房间 ${room.d.code} 推送画面失败`, e)
+  }
+}
+
+function pushAll(room: Room) {
   const conns = sockets.get(room.d.code)
   if (!conns) return
   let spectatorMsg: ServerMessage | null = null
@@ -146,6 +155,16 @@ const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
 
 wss.on('connection', (ws, req) => {
+  // 连接回调里的异常没人捕获，会让整个进程退出，这里兜底只断开这个连接
+  try {
+    onConnection(ws, req)
+  } catch (e) {
+    console.error('处理连接失败', e)
+    ws.close()
+  }
+})
+
+function onConnection(ws: WebSocket, req: IncomingMessage) {
   const url = new URL(req.url ?? '', 'http://x')
   const code = url.searchParams.get('code') ?? ''
   const token = url.searchParams.get('token') ?? ''
@@ -246,7 +265,7 @@ wss.on('connection', (ws, req) => {
     const r = rooms.get(code)
     if (r) broadcast(r)
   })
-})
+}
 
 repairOrphanGames(rooms)
 sweepIdleRooms()

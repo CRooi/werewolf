@@ -538,3 +538,14 @@ test('witch self-save: only on the first night when enabled', () => {
   expect(s.room.view(g.seats[3]!, () => true).game!.witch!.selfSave).toBe(false)
   expect(() => s.as(3, { type: 'witchAct', save: true, poison: null })).toThrow('女巫只有第一晚可以自救')
 })
+
+test('views of a revealed game do not throw (regression: server crash loop)', () => {
+  const s = setup({ ...cfg, witchSelfSave: true })
+  s.fixRoles(ROLES)
+  const g = s.room.d.game!
+  g.phase = 'revealed'
+  g.winner = 'good'
+  for (const uid of [s.judge.id, ...g.seats]) expect(() => s.room.view(uid, () => true)).not.toThrow()
+  expect(() => s.room.spectatorView(() => true)).not.toThrow()
+  expect(() => s.room.adminView(() => true)).not.toThrow()
+})

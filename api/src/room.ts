@@ -925,9 +925,9 @@ export class Room {
     }
   }
 
-  /** 女巫今晚能否自救：规则开启时只有第一晚可以 */
+  /** 女巫今晚能否自救：规则开启时只有第一晚可以。生成画面时也会调用，对局已公布结果时不能用 g() */
   private canWitchSelfSave() {
-    return this.d.config.witchSelfSave && this.g().day === 1
+    return this.d.config.witchSelfSave && this.d.game?.day === 1
   }
 
   /** 狼人本轮选择作废，所有狼人重新选择（候选仍是全部存活玩家） */
