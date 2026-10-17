@@ -11,6 +11,7 @@ import { ConnBadge } from '@/components/game/ConnBadge'
 import { avatarHue } from '@/components/game/PlayerToken'
 import { roleLabel } from '@/components/game/RoleCard'
 import { useSpectator } from '@/hooks/useSpectator'
+import { SystemUpdating } from '@/components/game/SystemUpdating'
 import { PHASE_TITLE, isNight } from './game/helpers'
 
 /** 大屏入口：?overview=房间码；未带房间码时先输入 */
@@ -50,7 +51,7 @@ function CodeForm({ onSubmit }: { onSubmit: (code: string) => void }) {
 }
 
 function Board({ code }: { code: string }) {
-  const { state, status, gone } = useSpectator(code)
+  const { state, status, gone, upgrading } = useSpectator(code)
   useEffect(() => {
     document.title = `大屏 · 房间 ${code} - 狼人杀`
   }, [code])
@@ -62,6 +63,7 @@ function Board({ code }: { code: string }) {
   return (
     <div className="flex h-dvh w-full flex-col gap-[2vh] overflow-hidden px-[2.5vw] py-[2.5vh]">
       <Scenery night={night} dim={!!g && !night} />
+      <SystemUpdating upgrading={upgrading} ready={!!state} />
       {/* 顶栏 */}
       <header className="flex items-center gap-[1.5vw]">
         <Logo className="size-[7vh]" />

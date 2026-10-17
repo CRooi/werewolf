@@ -5,23 +5,27 @@ import { Scenery } from '@/components/art/Scenery'
 import { useRoomSocket } from '@/hooks/useRoomSocket'
 import { tabKey, type Session } from '@/lib/session'
 import { IdleWarning } from '@/components/game/IdleWarning'
+import { SystemUpdating } from '@/components/game/SystemUpdating'
 import { Lobby } from './Lobby'
 import { GameScreen } from './game/GameScreen'
 
 const DISMISS_KEY = tabKey('dismissed')
 
 export function RoomScreen({ session, onExit }: { session: Session; onExit: () => void }) {
-  const { state, status, send, receivedAt } = useRoomSocket(session, (reason) => {
+  const { state, status, send, receivedAt, upgrading } = useRoomSocket(session, (reason) => {
     toast(reason)
     onExit()
   })
   // 已看过结果的对局 id：点“下一步”后回到房间
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISS_KEY))
 
+  const updating = <SystemUpdating upgrading={upgrading} ready={!!state} />
+
   if (!state) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-3 text-gold-soft">
         <Scenery night />
+        {updating}
         <Loader2 className="size-8 animate-spin" />
         <span className="font-display text-lg">{status === 'closed' ? '连接断开，正在重连…' : '正在进入房间…'}</span>
         <button className="mt-6 text-xs text-muted-foreground underline" onClick={onExit}>
@@ -38,6 +42,7 @@ export function RoomScreen({ session, onExit }: { session: Session; onExit: () =
     return (
       <>
       {idle}
+      {updating}
       <GameScreen
         state={state}
         status={status}
@@ -54,6 +59,7 @@ export function RoomScreen({ session, onExit }: { session: Session; onExit: () =
   return (
     <>
     {idle}
+    {updating}
     <Lobby
       state={state}
       status={status}

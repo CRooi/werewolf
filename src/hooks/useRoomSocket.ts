@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { ClientMessage, ServerMessage, StateView } from '@shared/types'
 import type { Session } from '@/lib/session'
+import { checkServerBoot } from '@/lib/upgrade'
 
 export type ConnStatus = 'connecting' | 'open' | 'closed'
 
@@ -11,6 +12,8 @@ export function useRoomSocket(session: Session, onKicked: (reason: string) => vo
   /** 收到最新状态的本地时间，用于把服务端给的剩余时间换算成本地截止时间 */
   const [receivedAt, setReceivedAt] = useState(0)
   const [status, setStatus] = useState<ConnStatus>('connecting')
+  /** 后端通知正在更新部署 */
+  const [upgrading, setUpgrading] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const kickedRef = useRef(onKicked)
   useEffect(() => {
@@ -37,6 +40,17 @@ export function useRoomSocket(session: Session, onKicked: (reason: string) => vo
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data) as ServerMessage
         switch (msg.type) {
+          case 'hello':
+            if (checkServerBoot(msg.bootId)) {
+              // 后端更新过，页面即将刷新
+              stopped = true
+              setUpgrading(true)
+              ws.close()
+            } else setUpgrading(false)
+            break
+          case 'upgrading':
+            setUpgrading(true)
+            break
           case 'state':
             setState(msg.state)
             setReceivedAt(Date.now())
@@ -87,5 +101,5 @@ export function useRoomSocket(session: Session, onKicked: (reason: string) => vo
     else toast.error('连接已断开，正在重连…')
   }, [])
 
-  return { state, status, send, receivedAt }
+  return { state, status, send, receivedAt, upgrading }
 }

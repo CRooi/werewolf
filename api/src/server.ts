@@ -8,6 +8,9 @@ import { deleteRoom, loadRooms, saveRoom } from './db'
 import { recordAction, recordRoomClosed, registerAdminRoutes, repairOrphanGames, snapshotBefore, verifyAdminToken } from './admin'
 import { GameError, ROOM_IDLE_MS, Room, genCode, idleText } from './room'
 
+/** 本次启动的 id：前端重连后发现变了，就刷新页面换上新版前端 */
+const BOOT_ID = crypto.randomUUID()
+
 const rooms = new Map<string, Room>()
 for (const d of loadRooms()) rooms.set(d.code, new Room(d))
 
@@ -147,6 +150,7 @@ wss.on('connection', (ws, req) => {
   const code = url.searchParams.get('code') ?? ''
   const token = url.searchParams.get('token') ?? ''
   const room = rooms.get(code)
+  send(ws, { type: 'hello', bootId: BOOT_ID })
 
   // 后台上帝视角：只读，需要管理员令牌
   if (url.searchParams.has('admin')) {
@@ -248,6 +252,21 @@ repairOrphanGames(rooms)
 sweepIdleRooms()
 // 每分钟检查一次（超时设置很短时相应加快，便于测试）
 setInterval(sweepIdleRooms, Math.min(60_000, Math.max(1000, ROOM_IDLE_MS / 3)))
+
+/**
+ * 收到退出信号（pm2 重启、部署、Ctrl+C）时通知所有在线连接「系统更新中」，
+ * 留一点时间把通知发出去再退出。房间在每次操作后已经保存，不需要额外处理。
+ */
+let shuttingDown = false
+function shutdown(sig: string) {
+  if (shuttingDown) return
+  shuttingDown = true
+  for (const byKey of sockets.values()) for (const set of byKey.values()) for (const w of set) send(w, { type: 'upgrading' })
+  console.log(`收到 ${sig}，已通知在线玩家，退出`)
+  setTimeout(() => process.exit(0), 300)
+}
+process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGTERM', () => shutdown('SIGTERM'))
 
 const port = Number(process.env.PORT ?? 3001)
 server.listen(port, () => console.log(`🐺 werewolf api listening on http://localhost:${port}`))

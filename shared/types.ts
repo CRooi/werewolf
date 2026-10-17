@@ -333,6 +333,10 @@ export type ServerMessage =
   | { type: 'swapResult'; accepted: boolean; by: string }
   | { type: 'kicked'; reason: string }
   | { type: 'pong' }
+  /** 连上后先发送：后端本次启动的 id，前端发现变了说明后端更新过，需要刷新页面 */
+  | { type: 'hello'; bootId: string }
+  /** 后端即将重启（更新部署） */
+  | { type: 'upgrading' }
 
 // ---------- 对局回放 ----------
 
